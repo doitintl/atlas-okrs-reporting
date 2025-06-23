@@ -1,0 +1,22 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## Coding
+Scripts must be always in English, comments and prints included
+
+
+## Team context
+We only care about the goals of the people within the EMEA team, the ones that we have in the @teams.csv or in the table `okrs_dataset.teams`
+
+## Goals Sanity check 
+For a goal to be completely healthy it nees to bring:
+- ✅ A descriptive name 
+- 📅 A Due Date (monthly preferred)
+- 📈 A Progress Metric (manual or automatic)
+- 👤 A single Owner 
+- 🌳 A Lineage (in dot notation e.g. doit.cs.cre.emea.south.es-pod-1)
+- 🏷️ Tags
+-  📌 Start Date (optional but recommended specially for those goals starting in the feature)
+- 🧭 Goal owner team's name as the team field
