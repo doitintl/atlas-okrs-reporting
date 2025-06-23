@@ -16,6 +16,7 @@ okrs-reporting/
 │   └── config_loader.py        # Configuration loader for all scripts
 └── tools/
     ├── analyse_okr_coverage_in_bq.py      # Coverage analysis in BigQuery
+    ├── generate_okr_fix_messages.py       # Generate Slack messages for OKR fixes
     ├── generate_okr_tree_from_bq.py       # Tree generation from BigQuery
     ├── okrs_sanity_check_bq_data.py       # Sanity check BigQuery data
     └── okrs_sanity_check_scrap_data.py    # Sanity check scraped data
@@ -105,6 +106,28 @@ python tools/okrs_sanity_check_scrap_data.py
 
 **Key Feature - Aggregation Candidates:**
 Identifies parent goals that can enable `AVERAGE_ROLLUP` to automatically calculate progress from sub-goals with metrics. Perfect for goals that should aggregate their children's progress.
+
+### Generate Slack messages for OKR fixes
+```bash
+python tools/generate_okr_fix_messages.py
+```
+**Personalized OKR Fix Messages** - generates ready-to-send Slack messages:
+- 📤 Individual messages for each person with malformed OKRs
+- 📊 Concise table format showing exactly what's missing
+- 🎯 Clear emoji symbols for each missing field
+- 📋 Legend explaining what each symbol means
+- 💾 Saves messages to `okr_fix_messages.txt` for easy copy-paste
+
+**Message Format:**
+```
+Hi [Name]! 👋
+Your OKRs need some updates in Atlas:
+| OKR Name                  | Missing  |
+|---------------------------|----------|
+| Example OKR               | 👥 📈     |
+Legend: 📅 Target Date | 👥 Teams | 🔗 Parent Goal | 👤 Owner | 📈 Metric | 🌳 Lineage
+Please update when you can. Thanks! 🙏
+```
 
 ### BigQuery data analysis
 ```bash

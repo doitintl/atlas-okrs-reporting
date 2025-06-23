@@ -46,4 +46,7 @@ venv.bak/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Generated message files
+okr_fix_messages.txt 

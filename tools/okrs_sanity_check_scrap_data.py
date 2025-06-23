@@ -41,6 +41,19 @@ def load_team_members():
     team_members = set(teams_df['name'].str.strip())
     return teams_df, team_members
 
+def is_empty_or_null(value):
+    """
+    Check if a value is empty, null, nan, or None
+    """
+    if value is None:
+        return True
+    
+    # Convert to string and strip whitespace
+    str_value = str(value).strip().lower()
+    
+    # Check for empty, null, nan, or none values
+    return str_value in ['', 'null', 'nan', 'none', 'na']
+
 def enhanced_okr_sanity_check(row):
     """
     Enhanced sanity check for OKRs with additional requirements:
@@ -53,23 +66,22 @@ def enhanced_okr_sanity_check(row):
     """
     missing = []
     
-    # Original checks
-    if not row.get('Target Date') or str(row.get('Target Date')).strip() in ['', 'null']:
+    # Original checks with improved validation
+    if is_empty_or_null(row.get('Target Date')):
         missing.append('Target Date')
-    if not row.get('Teams') or str(row.get('Teams')).strip() in ['', 'null']:
+    if is_empty_or_null(row.get('Teams')):
         missing.append('Teams')
-    if not row.get('Parent Goal') or str(row.get('Parent Goal')).strip() in ['', 'null']:
+    if is_empty_or_null(row.get('Parent Goal')):
         missing.append('Parent Goal')
-    if not row.get('Owner') or str(row.get('Owner')).strip() in ['', 'null']:
+    if is_empty_or_null(row.get('Owner')):
         missing.append('Owner')
     
     # NEW checks
     progress_type = str(row.get('Progress Type', '')).strip()
-    if not progress_type or progress_type in ['', 'null', 'NONE']:
+    if is_empty_or_null(progress_type) or progress_type == 'NONE':
         missing.append('Progress Type (Metric)')
     
-    lineage_value = str(row.get('Lineage', '')).strip()
-    if not lineage_value or lineage_value in ['', 'null', 'nan']:
+    if is_empty_or_null(row.get('Lineage')):
         missing.append('Lineage')
     
     return missing
@@ -103,7 +115,7 @@ def find_aggregation_candidates(okrs_df, team_okrs):
             goal_key_to_owner[goal_key] = owner
             goal_key_to_progress_type[goal_key] = progress_type
             
-            if parent_goal and parent_goal not in ['', 'nan']:
+            if not is_empty_or_null(parent_goal):
                 if parent_goal not in parent_to_children:
                     parent_to_children[parent_goal] = []
                 parent_to_children[parent_goal].append(goal_key)
@@ -116,7 +128,7 @@ def find_aggregation_candidates(okrs_df, team_okrs):
         progress_type = str(team_goal.get('Progress Type', '')).strip()
         
         # Skip if this goal already has a metric
-        if progress_type and progress_type not in ['', 'null', 'NONE', 'nan']:
+        if not is_empty_or_null(progress_type) and progress_type != 'NONE':
             continue
         
         # Check if this goal has children
@@ -128,7 +140,7 @@ def find_aggregation_candidates(okrs_df, team_okrs):
         children_with_metrics = 0
         for child_key in children:
             child_progress_type = goal_key_to_progress_type.get(child_key, '')
-            if child_progress_type and child_progress_type not in ['', 'null', 'NONE', 'nan']:
+            if not is_empty_or_null(child_progress_type) and child_progress_type != 'NONE':
                 children_with_metrics += 1
         
         # Determine if aggregation is possible
