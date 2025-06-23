@@ -1,4 +1,28 @@
-# Changelog - Scripts Parameterization
+# Changelog - Atlas OKRs Reporting
+
+## [2025-06-23] - Enhanced aggregation analysis
+
+### ✅ New Features
+
+#### 📊 Aggregation Candidates Analysis
+- **Enhanced `okrs_sanity_check_scrap_data.py`** with new table:
+  - Identifies parent goals without metrics that have sub-goals
+  - Shows count of sub-goals with metrics
+  - Recommends goals that can enable `AVERAGE_ROLLUP`
+  - Prioritized by aggregation potential
+
+#### 🎯 Key Benefits
+- **Easy optimization**: Quick identification of goals ready for automatic metric aggregation
+- **Data-driven recommendations**: Clear insight into which parent goals can benefit from rollup metrics
+- **Actionable output**: Direct guidance on enabling `AVERAGE_ROLLUP` progress type
+
+### 🛠️ Technical Improvements
+- Added `find_aggregation_candidates()` function
+- Enhanced hierarchy analysis with parent-child mapping
+- Improved data validation for NaN values
+- Updated documentation in README.md
+
+---
 
 ## [2025-06-23] - Complete parameterization of sensitive data
 

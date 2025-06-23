@@ -78,6 +78,76 @@ def checkmark(val):
     """Return checkmark or X based on boolean value"""
     return '✅' if val else '❌'
 
+def find_aggregation_candidates(okrs_df, team_okrs):
+    """
+    Find parent goals without metrics that have sub-goals with metrics.
+    These are candidates for AVERAGE_ROLLUP aggregation.
+    """
+    candidates = []
+    
+    # Build parent-child mapping for all goals (not just team members)
+    goal_key_to_name = {}
+    goal_key_to_owner = {}
+    goal_key_to_progress_type = {}
+    parent_to_children = {}
+    
+    for _, row in okrs_df.iterrows():
+        goal_key = str(row.get('Goal Key', '')).strip()
+        goal_name = str(row.get('Name', '')).strip()
+        owner = str(row.get('Owner', '')).strip()
+        parent_goal = str(row.get('Parent Goal', '')).strip()
+        progress_type = str(row.get('Progress Type', '')).strip()
+        
+        if goal_key:
+            goal_key_to_name[goal_key] = goal_name
+            goal_key_to_owner[goal_key] = owner
+            goal_key_to_progress_type[goal_key] = progress_type
+            
+            if parent_goal and parent_goal not in ['', 'nan']:
+                if parent_goal not in parent_to_children:
+                    parent_to_children[parent_goal] = []
+                parent_to_children[parent_goal].append(goal_key)
+    
+    # Check each team member's goal to see if it's a parent without metrics
+    for _, team_goal in team_okrs.iterrows():
+        goal_key = str(team_goal.get('Goal Key', '')).strip()
+        goal_name = str(team_goal.get('Name', '')).strip()
+        owner = str(team_goal.get('Owner', '')).strip()
+        progress_type = str(team_goal.get('Progress Type', '')).strip()
+        
+        # Skip if this goal already has a metric
+        if progress_type and progress_type not in ['', 'null', 'NONE', 'nan']:
+            continue
+        
+        # Check if this goal has children
+        children = parent_to_children.get(goal_key, [])
+        if not children:
+            continue  # Not a parent goal
+        
+        # Count children and children with metrics
+        children_with_metrics = 0
+        for child_key in children:
+            child_progress_type = goal_key_to_progress_type.get(child_key, '')
+            if child_progress_type and child_progress_type not in ['', 'null', 'NONE', 'nan']:
+                children_with_metrics += 1
+        
+        # Determine if aggregation is possible
+        can_aggregate = '✅' if children_with_metrics > 0 else '❌'
+        
+        candidates.append({
+            'owner': owner,
+            'goal_name': goal_name,
+            'goal_key': goal_key,
+            'sub_goals_count': len(children),
+            'sub_goals_with_metrics': children_with_metrics,
+            'can_aggregate': can_aggregate
+        })
+    
+    # Sort by number of sub-goals with metrics (descending) for better prioritization
+    candidates.sort(key=lambda x: x['sub_goals_with_metrics'], reverse=True)
+    
+    return candidates
+
 def main():
     print("🔍 Enhanced OKRs Sanity Check")
     print("=" * 60)
@@ -260,6 +330,48 @@ def main():
         print()
     else:
         print("🎉 All OKRs for team members pass the enhanced sanity check!")
+        print()
+    
+    # NEW: Show parent goals without metrics that have sub-goals (aggregation candidates)
+    print("📊 Parent Goals Without Metrics (Aggregation Candidates):")
+    print("-" * 65)
+    
+    # Build hierarchy to identify parent-child relationships
+    aggregation_candidates = find_aggregation_candidates(okrs_df, team_okrs)
+    
+    if aggregation_candidates:
+        agg_table = []
+        for candidate in aggregation_candidates:
+            agg_table.append([
+                candidate['owner'],
+                (candidate['goal_name'][:50] + "...") if len(candidate['goal_name']) > 50 else candidate['goal_name'],
+                candidate['sub_goals_count'],
+                candidate['sub_goals_with_metrics'],
+                candidate['can_aggregate']
+            ])
+        
+        agg_headers = [
+            "Owner",
+            "Parent Goal Name", 
+            "Sub-Goals",
+            "Sub-Goals w/ Metrics",
+            "Can Aggregate"
+        ]
+        
+        print(tabulate(
+            agg_table,
+            headers=agg_headers,
+            tablefmt="fancy_grid",
+            showindex=False
+        ))
+        
+        # Summary recommendation
+        can_aggregate_count = len([c for c in aggregation_candidates if c['can_aggregate'] == '✅'])
+        print(f"\n💡 RECOMMENDATION: {can_aggregate_count} parent goals can enable AVERAGE_ROLLUP to aggregate metrics from sub-goals")
+        print("   This would automatically calculate progress based on child goals' metrics.")
+        print()
+    else:
+        print("✅ No parent goals without metrics found (or all sub-goals lack metrics too)")
         print()
     
     # Show people without OKRs

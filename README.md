@@ -96,6 +96,15 @@ Quick extraction of initial snapshot:
 ```bash
 python tools/okrs_sanity_check_scrap_data.py
 ```
+**Enhanced OKRs Sanity Check** with comprehensive analysis:
+- ✅ Health status by team (with totals)
+- 📊 Progress type distribution (healthy vs malformed)
+- 🎯 **NEW**: Parent goals without metrics (aggregation candidates)
+- 👥 People without OKRs by team
+- 📋 Detailed malformed OKRs breakdown
+
+**Key Feature - Aggregation Candidates:**
+Identifies parent goals that can enable `AVERAGE_ROLLUP` to automatically calculate progress from sub-goals with metrics. Perfect for goals that should aggregate their children's progress.
 
 ### BigQuery data analysis
 ```bash
