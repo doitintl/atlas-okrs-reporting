@@ -85,6 +85,9 @@ def format_missing_fields_short(missing_fields):
 def generate_slack_message(person_name, malformed_okrs_data):
     """Generate a personalized Slack message for a person with malformed OKRs"""
     
+    # Extract first name only (first word)
+    first_name = person_name.split()[0]
+    
     # Build table rows
     table_rows = []
     for _, okr in malformed_okrs_data.iterrows():
@@ -100,7 +103,7 @@ def generate_slack_message(person_name, malformed_okrs_data):
     
     table_content = '\n'.join(table_rows)
     
-    message = f"""Hi {person_name}! 👋
+    message = f"""Hi {first_name}! 👋
 
 Your OKRs need some updates in Atlas:
 
