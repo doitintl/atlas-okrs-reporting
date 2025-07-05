@@ -1,0 +1,100 @@
+# Docker ignore file - optimized for container builds
+# Keep this aligned with .cloudignore for consistency
+
+# === VERSION CONTROL ===
+.git/
+.gitignore
+.gitattributes
+
+# === DOCUMENTATION ===
+README.md
+CLOUD_RUN.md
+CHANGELOG.md
+*.md
+docs/
+
+# === CONFIGURATION FILES ===
+# Note: config.env is needed by the application, so we don't exclude it
+*.env.local
+*.env.development
+*.env.production
+*.env.staging
+
+# === DEVELOPMENT FILES ===
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === PYTHON DEVELOPMENT ===
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+
+# === BUILD ARTIFACTS ===
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# === LOGS ===
+*.log
+logs/
+log/
+
+# === TEMPORARY FILES ===
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+
+# === DATA FILES ===
+data/
+scraped/
+data_snapshots/
+# Note: teams.csv is needed by the application, so we don't exclude it
+# Note: config.env is needed by the application, so we don't exclude it
+
+# === BACKUP FILES ===
+*.bak
+*.backup
+*.old
+
+# === DEPLOYMENT SCRIPTS ===
+setup_cloud_infrastructure.sh
+deploy.sh
+
+# === SECRETS AND CREDENTIALS ===
+*credentials*
+*secrets*
+*.key
+*.pem
+*.crt
+
+# === HELPERS AND TOOLS ===
+# Note: helpers/ and tools/ are excluded as they're not needed in container
+helpers/
+tools/
+scripts/
+
+# === HEALTH CHECK FILES ===
+healthcheck_ignore_files.py
+fix_ignore_files.py

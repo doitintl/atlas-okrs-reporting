@@ -1,19 +1,77 @@
 # OKRs Reporting Tool
 
-Tools to extract and analyze Goals data from Atlassian using web scraping and BigQuery analysis.
+A comprehensive tool to extract and analyze Goals data from Atlassian using web scraping and BigQuery analysis.
+
+## 🚀 Quick Start
+
+### 🆕 Cloud Run Version (Recommended)
+
+Modern, scalable version with enterprise-grade security and automation:
+
+```bash
+# 1. Setup infrastructure with security best practices
+./deployment/setup_cloud_infrastructure.sh
+
+# 2. Configure application settings
+cp config.env.example config.env
+# Edit config.env with your Atlassian credentials and infrastructure settings
+
+# 3. Deploy with automated script
+./deployment/deploy.sh
+```
+
+**✨ Features:**
+- 🔐 **Automated Secret Management** - Reads config.env and creates secrets automatically
+- 🏗️ **Infrastructure as Code** - Complete setup with one script
+- 🚀 **Cloud Build Integration** - Automated deployment with security best practices
+- 📊 **In-memory Processing** - No temporary files, direct Cloud Storage upload
+- 🔄 **Multi-environment Support** - Production, staging, development
+- 🔒 **Enterprise Security** - Service accounts, Secret Manager, Artifact Registry
+
+### 📊 Original Bash Scripts
+
+The original bash-based extraction tools are still available for local use:
+
+```bash
+# Setup
+./scripts/setup_venv_uv.sh
+cp config.env.example config.env
+# Edit config.env with your credentials
+
+# Extract OKRs (complete recursive extraction)
+./scripts/scrap_okrs.sh
+```
 
 ## 📁 Project Structure
 
 ```
 okrs-reporting/
-├── scrap_okrs.sh              # Main script - complete recursive extraction
-├── export_okrs_csv.sh         # Simple script - snapshot extraction
-├── teams.csv                  # EMEA teams list
-├── config.env                 # Configuration (sensitive - not in git)
-├── config.env.example         # Configuration template
+├── 🆕 CLOUD RUN VERSION
+│   ├── src/                             # Source code
+│   │   └── cloud_run_okrs_job.py        # Main Cloud Run job application
+│   └── deployment/                      # Deployment configuration
+│       ├── setup_cloud_infrastructure.sh  # Infrastructure setup with security
+│       ├── deploy.sh                    # Convenient deployment script  
+│       ├── cloudbuild.yaml             # Automated Cloud Build configuration
+│       ├── Dockerfile                  # Container configuration
+│       └── .cloudignore                # Cloud Build optimization
+├── 📊 ORIGINAL BASH SCRIPTS
+│   └── scripts/                         # Original bash scripts
+│       ├── scrap_okrs.sh               # Complete recursive extraction (DFS algorithm)
+│       ├── export_okrs_csv.sh          # Simple snapshot extraction
+│       └── setup_venv_uv.sh            # Virtual environment setup
+├── 📊 DATA
+│   └── data/                            # Team configuration and data
+│       └── teams.csv                   # EMEA teams list
+└── 📚 DOCUMENTATION
+    └── docs/                            # Detailed documentation
+        └── CLOUD_RUN.md                # Cloud Run deployment guide
+├── 🔧 CONFIGURATION
+│   ├── config.env                 # Main configuration (not in git)
+│   └── config.env.example         # Configuration template
 ├── helpers/
-│   ├── add_timestamp_to_csv.py # Helper to add timestamps & load to BigQuery
-│   └── config_loader.py        # Configuration loader for all scripts
+│   ├── add_timestamp_to_csv.py    # Helper to add timestamps & load to BigQuery
+│   └── config_loader.py           # Configuration loader for all scripts
 └── tools/
     ├── analyse_okr_coverage_in_bq.py      # Coverage analysis in BigQuery
     ├── generate_okr_fix_messages.py       # Generate Slack messages for OKR fixes
@@ -22,22 +80,31 @@ okrs-reporting/
     └── okrs_sanity_check_scrap_data.py    # Sanity check scraped data
 ```
 
-## 🚀 Initial Setup
+## 🔧 Configuration
 
-### 1. Clone and prepare environment
-```bash
-git clone <repo-url>
-cd okrs-reporting
-./setup_venv_uv.sh  # Setup virtual environment with uv and install dependencies from pyproject.toml
-```
+### Single Configuration File
 
-### 2. Configure credentials
+All versions now use a unified `config.env` file:
+
 ```bash
 cp config.env.example config.env
-# Edit config.env with your data (see next section)
 ```
 
-### 3. Get authentication cookies
+**Required Configuration:**
+- **ATLASSIAN_BASE_URL**: Your Atlassian instance URL
+- **ORGANIZATION_ID**: Organization ID from Atlassian URLs
+- **CLOUD_ID**: Cloud/site ID
+- **WORKSPACE_UUID**: Workspace UUID
+- **DIRECTORY_VIEW_UUID**: Directory view UUID
+- **CUSTOM_FIELD_UUID**: "Lineage" custom field UUID
+- **ATLASSIAN_COOKIES**: Authentication cookies (see below)
+
+**Optional Configuration:**
+- **BigQuery settings**: Project, dataset, table names
+- **Team filtering**: CRE teams, excluded teams, US people
+- **Cloud Run settings**: Region, memory, CPU, scaling
+
+### 🍪 Getting Authentication Cookies
 
 **Important**: Cookies expire periodically and need to be updated.
 
@@ -48,88 +115,127 @@ cp config.env.example config.env
 5. Copy the complete `Cookie:` header
 6. Paste in `config.env` as `ATLASSIAN_COOKIES` value
 
-### 4. Complete configuration
+## 🚀 Cloud Run Deployment
 
-Edit `config.env` with:
+### Automated Deployment (Recommended)
 
-**Atlassian Configuration:**
-- **ATLASSIAN_BASE_URL**: Base URL of your Atlassian instance
-- **ORGANIZATION_ID**: Your organization ID
-- **CLOUD_ID**: Cloud/site ID
-- **WORKSPACE_UUID**: Workspace UUID
-- **DIRECTORY_VIEW_UUID**: Directory view UUID
-- **CUSTOM_FIELD_UUID**: "Lineage" custom field UUID
-- **ATLASSIAN_COOKIES**: Authentication cookies (see step 3)
-
-**BigQuery Configuration:**
-- **BQ_PROJECT**: GCP project ID (leave empty to use default)
-- **BQ_DATASET**: BigQuery dataset name (default: "okrs_dataset")
-- **BQ_TABLE**: BigQuery table name (default: "okrs_table")
-- **BQ_TEAMS_TABLE**: Teams table name (default: "teams")
-- **CRE_TEAMS**: Comma-separated list of CRE team names for analysis tools
-- **EXCLUDE_TEAMS**: Comma-separated list of teams to exclude from reports
-- **US_PEOPLE**: Comma-separated list of US-based people to exclude from EMEA analysis
-
-## 📊 Main Scripts
-
-### `scrap_okrs.sh` - Complete Recursive Extraction 
-DFS (Depth-First Search) algorithm that traverses the entire goals tree:
 ```bash
-./scrap_okrs.sh
-```
-- ✅ Finds ALL goals (including nested sub-goals)
-- 🌳 Complete recursive tree traversal
-- 📋 Complete details for each goal
-- 🚫 Automatically filters archived goals
+# Deploy to production
+./deployment/deploy.sh
 
-### `export_okrs_csv.sh` - Simple Extraction
-Quick extraction of initial snapshot:
+# Deploy to staging
+./deployment/deploy.sh -e staging
+
+# Deploy with custom settings
+./deployment/deploy.sh --url https://mycompany.atlassian.net --org-id myorg123
+
+# Deploy asynchronously
+./deployment/deploy.sh --async --quiet
+
+# See all options
+./deployment/deploy.sh --help
+```
+
+### Manual Cloud Build
+
 ```bash
-./export_okrs_csv.sh
-```
-- ⚡ Faster but less complete (missing metrics and lineage)
-- Requires BigQuery
+# Deploy with automatic config loading
+gcloud builds submit
 
+# Deploy with overrides
+gcloud builds submit \
+    --substitutions=ATLASSIAN_BASE_URL=https://mycompany.atlassian.net,ORGANIZATION_ID=myorg123
+```
+
+### Cloud Run Usage
+
+```bash
+# Health check
+curl https://your-service-url/
+
+# Execute scraping
+curl -X POST https://your-service-url/scrape
+```
+
+**Successful Response:**
+```json
+{
+  "status": "success",
+  "message": "Scraping completed successfully",
+  "data": {
+    "public_url": "https://storage.googleapis.com/your-bucket/okrs/export-202507052015_processed.csv",
+    "filename": "okrs/export-202507052015_processed.csv",
+    "total_okrs": 150,
+    "timestamp": "2025-07-05T20:15:00"
+  }
+}
+```
+
+## 📊 Original Bash Scripts
+
+### Complete Recursive Extraction
+
+```bash
+./scripts/scrap_okrs.sh
+```
+
+**Features:**
+- ✅ **DFS Algorithm** - Finds ALL goals including nested sub-goals
+- 🌳 **Complete Tree Traversal** - Recursive exploration of goal hierarchy
+- 📋 **Complete Details** - All goal information and metadata
+- 🚫 **Automatic Filtering** - Excludes archived goals
+
+### Simple Snapshot Extraction
+
+```bash
+./scripts/export_okrs_csv.sh
+```
+
+**Features:**
+- ⚡ **Faster** - Quick snapshot extraction
+- 📊 **Basic Data** - Less complete than recursive extraction
+- 🔄 **BigQuery Ready** - Directly uploads to BigQuery
 
 ## 🛠️ Analysis Tools
 
-### Scraped data analysis
+### Scraped Data Analysis
+
 ```bash
 python tools/okrs_sanity_check_scrap_data.py
 ```
-**Enhanced OKRs Sanity Check** with comprehensive analysis:
-- ✅ Health status by team (with totals)
-- 📊 Progress type distribution (healthy vs malformed)
-- 🎯 **NEW**: Parent goals without metrics (aggregation candidates)
-- 👥 People without OKRs by team
-- 📋 Detailed malformed OKRs breakdown
 
-**Key Feature - Aggregation Candidates:**
-Identifies parent goals that can enable `AVERAGE_ROLLUP` to automatically calculate progress from sub-goals with metrics. Perfect for goals that should aggregate their children's progress.
+**Enhanced OKRs Sanity Check:**
+- ✅ **Health Status** - By team with totals
+- 📊 **Progress Distribution** - Healthy vs malformed analysis
+- 🎯 **Aggregation Candidates** - Parent goals without metrics
+- 👥 **People Without OKRs** - By team analysis
+- 📋 **Detailed Breakdown** - Malformed OKRs analysis
 
-### Generate Slack messages for OKR fixes
+### Generate Slack Messages
+
 ```bash
 python tools/generate_okr_fix_messages.py
 ```
-**Personalized OKR Fix Messages** - generates ready-to-send Slack messages:
-- 📤 Individual messages for each person with malformed OKRs
-- 📊 Concise table format showing exactly what's missing
-- 🎯 Clear emoji symbols for each missing field
-- 📋 Legend explaining what each symbol means
-- 💾 Saves messages to `okr_fix_messages.txt` for easy copy-paste
 
-**Message Format:**
+**Personalized OKR Fix Messages:**
+- 📤 **Individual Messages** - Ready-to-send Slack messages
+- 📊 **Table Format** - Clear breakdown of missing fields
+- 🎯 **Emoji Indicators** - Visual symbols for each missing field
+- 💾 **Auto-save** - Messages saved to `okr_fix_messages.txt`
+
+**Example Message:**
 ```
-Hi [Name]! 👋
+Hi John! 👋
 Your OKRs need some updates in Atlas:
 | OKR Name                  | Missing  |
 |---------------------------|----------|
-| Example OKR               | 👥 📈     |
+| Improve system uptime     | 👥 📈     |
 Legend: 📅 Target Date | 👥 Teams | 🔗 Parent Goal | 👤 Owner | 📈 Metric | 🌳 Lineage
 Please update when you can. Thanks! 🙏
 ```
 
-### BigQuery data analysis
+### BigQuery Analysis
+
 ```bash
 python tools/okrs_sanity_check_bq_data.py
 python tools/analyse_okr_coverage_in_bq.py
@@ -140,76 +246,76 @@ python tools/generate_okr_tree_from_bq.py
 
 ### ❌ Error 401 "Unauthorized"
 
-**Symptom**: Script fails with `{"code":401,"message":"Unauthorized"}`
-
 **Cause**: Authentication cookies have expired
 
 **Solution**:
-1. Open your browser in Atlassian Goals
+1. Open browser in Atlassian Goals
 2. Open Developer Tools (F12) → Network
-3. Reload the page or perform any action
-4. Look for a GET/POST request to `/graphql`
-5. In the request, go to Headers → Request Headers
-6. Copy the complete value of the `Cookie:` header
-7. Update `config.env`:
-   ```bash
-   ATLASSIAN_COOKIES='new_cookie_value_here'
-   ```
-8. Run the script again
+3. Reload page or perform action
+4. Find GET/POST request to `/graphql`
+5. Copy complete `Cookie:` header value
+6. Update `config.env` with new cookies
+7. Run script again
 
-**Note**: Cookies expire periodically (every few days/weeks), so this process needs to be repeated when they fail.
+### 🐛 Script Hangs or Takes Too Long
 
-### 🐛 Script hangs or takes too long
+**Cause**: Script makes 0.3s pauses between requests to avoid API overload
 
 **Solution**: 
-- The script makes 0.3s pauses between requests to avoid overloading the API
-- For many goals it can take several minutes
+- For many goals, expect several minutes execution time
 - Use Ctrl+C to cancel if necessary
+- Check network connectivity and API responses
 
-### 📄 Empty CSV or "null" data
+### 📄 Empty CSV or "null" Data
 
-**Possible causes**:
-1. Expired cookies (see above)
-2. Incorrect IDs in `config.env`
-3. Changes in Atlassian API
+**Possible Causes**:
+- Expired authentication cookies
+- Invalid UUIDs in configuration
+- Network connectivity issues
+- API rate limiting
 
-**Solution**: Verify configuration and cookies
+**Solution**:
+- Update authentication cookies
+- Verify UUIDs in Atlassian URLs
+- Check network connectivity
+- Wait and retry if rate limited
 
-### 🔍 Method comparison
+## 🔒 Security & Best Practices
 
-To verify completeness, you can compare results:
-```bash
-wc -l scraped/export-*_processed.csv  # Recursive method
-wc -l export-*.csv                     # Simple method
-```
+### Cloud Run Security Features
 
-The recursive method should find more goals.
+- 🔐 **Secret Manager** - Sensitive data encrypted at rest and in transit
+- 👤 **Service Account** - Dedicated account with minimal required privileges
+- 🗂️ **Artifact Registry** - Modern, secure container image storage
+- 🪣 **Bucket Security** - Uniform bucket-level access with IAM restrictions
+- 🔍 **Audit Logging** - Complete audit trail of all resource access
+- 🏷️ **Resource Labeling** - Proper tagging for governance and cost tracking
 
-## 📋 Goals Sanity Check
+### Infrastructure Created
 
-For a goal to be completely healthy it needs:
-- ✅ Descriptive name
-- 📅 Target date (monthly preferred)
-- 📈 Progress metric (manual or automatic)
-- 👤 Single owner
-- 🌳 Lineage (dot notation e.g., doit.cs.cre.emea.south.es-pod-1)
-- 🏷️ Tags
-- 📌 Start date (optional but recommended)
-- 🧭 Goal owner's team name
+The setup script automatically creates:
+- **Service Account**: `okrs-scraper-sa@PROJECT_ID.iam.gserviceaccount.com`
+- **Artifact Registry**: `europe-west1-docker.pkg.dev/PROJECT_ID/okrs-scraper-repo`
+- **Cloud Storage**: `gs://PROJECT_ID-okrs-data`
+- **IAM Roles**: Minimal required permissions only
 
-## 🎯 EMEA Teams Only
+## 📚 Documentation
 
-All tools focus exclusively on goals from EMEA team members according to `teams.csv` and `okrs_dataset.teams` table.
+- 📖 **docs/CLOUD_RUN.md** - Detailed Cloud Run documentation
+- 📋 **tools/README.md** - Analysis tools documentation
+- 🔧 **helpers/README.md** - Helper utilities documentation
+- 📝 **CHANGELOG.md** - Project history and changes
 
-## 📝 Logs and Debugging
+## 🎯 Team Context
 
-Scripts include detailed logging:
-- URLs and variables before executing curl
-- Success/failure result of each request
-- Size of generated files
-- Error codes if they fail
+This tool is specifically designed for **EMEA team analysis**. All analysis focuses on teams defined in `data/teams.csv` and the `okrs_dataset.teams` table.
 
-For additional debugging, you can uncomment the line:
-```bash
-# rm -rf "$TEMP_DIR"  # Keep temporary files for debugging
-``` 
+**Goal Health Check Requirements:**
+- ✅ **Descriptive Name**
+- 📅 **Due Date** (monthly preferred)
+- 📈 **Progress Metric** (manual or automatic)
+- 👤 **Single Owner**
+- 🌳 **Lineage** (dot notation: e.g., doit.cs.cre.emea.south.es-pod-1)
+- 🏷️ **Tags**
+- 📌 **Start Date** (optional but recommended)
+- 🧭 **Team Name** as team field 

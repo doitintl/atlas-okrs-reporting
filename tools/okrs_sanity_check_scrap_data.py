@@ -18,7 +18,7 @@ from tabulate import tabulate
 import os
 
 # Config
-TEAMS_CSV = "teams.csv"
+TEAMS_CSV = "data/teams.csv"
 LATEST_CSV_PATTERN = "scraped/export-*_processed*.csv"
 
 def find_latest_csv():

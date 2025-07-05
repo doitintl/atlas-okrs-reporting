@@ -32,10 +32,10 @@ def find_latest_csv():
 
 def load_team_members():
     """Load team members from teams.csv"""
-    if not os.path.exists("teams.csv"):
-        raise FileNotFoundError("Teams file not found: teams.csv")
+    if not os.path.exists("data/teams.csv"):
+        raise FileNotFoundError("Teams file not found: data/teams.csv")
     
-    teams_df = pd.read_csv("teams.csv")
+    teams_df = pd.read_csv("data/teams.csv")
     team_members = set(teams_df['name'].str.strip())
     return teams_df, team_members
 
