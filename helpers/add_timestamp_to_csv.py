@@ -16,7 +16,7 @@ cleans multiline fields, and loads the result into a BigQuery table.
 #    bq mk -t --schema 'team:STRING,name:STRING,role:STRING' okrs_dataset.teams
 #
 # 4. Load the team data:
-#    bq load --autodetect --source_format=CSV --skip_leading_rows=1 -t okrs_dataset.teams ./teams.csv
+#    bq load --autodetect --source_format=CSV --skip_leading_rows=1 -t okrs_dataset.teams ./data/teams.csv
 # 
 
 """

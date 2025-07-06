@@ -10,5 +10,10 @@ dependencies = [
     "google-cloud-bigquery",         # BigQuery client and operations
     "db_dtypes",                     # BigQuery data types support
     "tabulate",                      # Table formatting for reports
-    "google-cloud-bigquery-storage"  # BigQuery Storage API for faster data transfer
+    "google-cloud-bigquery-storage", # BigQuery Storage API for faster data transfer
+    "google-cloud-storage",          # Google Cloud Storage client
+    "google-cloud-secret-manager",   # Google Cloud Secret Manager client
+    "requests",                      # HTTP requests for API calls
+    "python-dotenv",                 # Environment variable management
+    "google-cloud-logging"           # Google Cloud Logging
 ] 
