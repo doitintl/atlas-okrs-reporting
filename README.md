@@ -201,7 +201,12 @@ curl -X POST https://your-service-url/scrape
 ### Scraped Data Analysis
 
 ```bash
+# Analyze local CSV files
 python tools/okrs_sanity_check_scrap_data.py
+python tools/okrs_sanity_check_scrap_data.py --file scraped/specific_export.csv
+
+# Analyze latest file from Cloud Storage
+python tools/okrs_sanity_check_scrap_data.py --cloud
 ```
 
 **Enhanced OKRs Sanity Check:**
@@ -210,11 +215,17 @@ python tools/okrs_sanity_check_scrap_data.py
 - 🎯 **Aggregation Candidates** - Parent goals without metrics
 - 👥 **People Without OKRs** - By team analysis
 - 📋 **Detailed Breakdown** - Malformed OKRs analysis
+- ☁️ **Cloud Mode** - Automatically downloads latest file from Cloud Storage
 
 ### Generate Slack Messages
 
 ```bash
+# Generate messages from local CSV files
 python tools/generate_okr_fix_messages.py
+python tools/generate_okr_fix_messages.py --file scraped/specific_export.csv
+
+# Generate messages from latest Cloud Storage file
+python tools/generate_okr_fix_messages.py --cloud
 ```
 
 **Personalized OKR Fix Messages:**
@@ -222,6 +233,7 @@ python tools/generate_okr_fix_messages.py
 - 📊 **Table Format** - Clear breakdown of missing fields
 - 🎯 **Emoji Indicators** - Visual symbols for each missing field
 - 💾 **Auto-save** - Messages saved to `okr_fix_messages.txt`
+- ☁️ **Cloud Mode** - Automatically downloads latest file from Cloud Storage
 
 **Example Message:**
 ```
@@ -232,6 +244,28 @@ Your OKRs need some updates in Atlas:
 | Improve system uptime     | 👥 📈     |
 Legend: 📅 Target Date | 👥 Teams | 🔗 Parent Goal | 👤 Owner | 📈 Metric | 🌳 Lineage
 Please update when you can. Thanks! 🙏
+```
+
+#### ☁️ Cloud Mode Configuration
+
+**Dynamic Bucket Composition:**
+- Tools automatically compose bucket name as `${PROJECT_ID}-okrs-data`
+- Consistent with Cloud Run deployment in `cloudbuild.yaml`
+- No hardcoded PROJECT_IDs required
+
+**Fallback Hierarchy:**
+1. `GCS_BUCKET_NAME` environment variable (if set)
+2. `GOOGLE_CLOUD_PROJECT` environment variable
+3. `gcloud config get-value project` command
+
+**Usage:**
+```bash
+# Works out-of-the-box in any GCP project
+python tools/okrs_sanity_check_scrap_data.py --cloud
+
+# Override bucket name if needed
+export GCS_BUCKET_NAME="custom-bucket-name"
+python tools/okrs_sanity_check_scrap_data.py --cloud
 ```
 
 ### BigQuery Analysis

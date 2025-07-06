@@ -1,5 +1,40 @@
 # Changelog - Atlas OKRs Reporting
 
+## [2025-07-06] - Enhanced analysis tools with dynamic bucket composition
+
+### ✨ New Features
+
+#### 🚀 Dynamic Cloud Storage bucket composition
+- **Enhanced `tools/okrs_sanity_check_scrap_data.py`** and `tools/generate_okr_fix_messages.py`:
+  - Automatic bucket name composition using PROJECT_ID
+  - Format: `${PROJECT_ID}-okrs-data` (consistent with `cloudbuild.yaml`)
+  - Fallback hierarchy: `GCS_BUCKET_NAME` → `GOOGLE_CLOUD_PROJECT` → `gcloud config get-value project`
+
+#### 📊 Improved analysis capabilities
+- **Enhanced `--cloud` mode** in both tools:
+  - Automatic project detection without hardcoded bucket names
+  - Seamless integration with Cloud Storage
+  - Proper error handling and temporary file cleanup
+
+### 🛠️ Technical Improvements
+- **Portability**: Code works across different GCP projects without modifications
+- **Maintainability**: No hardcoded PROJECT_IDs to update
+- **Consistency**: Uses same bucket naming convention as Cloud Run deployment
+- **Flexibility**: Supports explicit `GCS_BUCKET_NAME` override when needed
+
+### 🎯 Benefits
+- **Zero configuration**: Works out-of-the-box in any GCP project
+- **Robust fallbacks**: Multiple ways to determine the correct bucket
+- **Error prevention**: Clear error messages if project cannot be determined
+- **Documentation**: Updated tool help text with optional parameter info
+
+### 📋 Configuration update
+- **`config.env`** simplified:
+  - Removed hardcoded `GCS_BUCKET_NAME="angel-sandbox-386416-okrs-data"`
+  - Added comment explaining optional nature: `# GCS_BUCKET_NAME="project-id-okrs-data"  # Optional: defaults to ${PROJECT_ID}-okrs-data`
+
+---
+
 ## [2025-07-06] - Critical bug fix: Null handling in Cloud Run Python implementation
 
 ### 🐛 Bug Fixed
