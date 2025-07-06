@@ -92,106 +92,24 @@ validate_prerequisites() {
     echo -e "${BLUE}📋 Config: $CONFIG_FILE${NC}"
 }
 
-# Function to build substitutions for overrides
-build_substitutions() {
-    local substitutions=""
-    
-    # Add environment override
-    if [ "$ENVIRONMENT" != "production" ]; then
-        substitutions="ENVIRONMENT=$ENVIRONMENT"
-    fi
-    
-    # Add job name based on environment
-    if [ "$ENVIRONMENT" != "production" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="JOB_NAME=okrs-scraper-job-$ENVIRONMENT"
-        else
-            substitutions="$substitutions,JOB_NAME=okrs-scraper-job-$ENVIRONMENT"
-        fi
-    fi
-    
-    # Add overrides if provided
-    if [ ! -z "$OVERRIDE_URL" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="ATLASSIAN_BASE_URL=$OVERRIDE_URL"
-        else
-            substitutions="$substitutions,ATLASSIAN_BASE_URL=$OVERRIDE_URL"
-        fi
-    fi
-    
-    if [ ! -z "$OVERRIDE_ORG_ID" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="ORGANIZATION_ID=$OVERRIDE_ORG_ID"
-        else
-            substitutions="$substitutions,ORGANIZATION_ID=$OVERRIDE_ORG_ID"
-        fi
-    fi
-    
-    if [ ! -z "$OVERRIDE_CLOUD_ID" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="CLOUD_ID=$OVERRIDE_CLOUD_ID"
-        else
-            substitutions="$substitutions,CLOUD_ID=$OVERRIDE_CLOUD_ID"
-        fi
-    fi
-    
-    if [ ! -z "$OVERRIDE_MEMORY" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="MEMORY=$OVERRIDE_MEMORY"
-        else
-            substitutions="$substitutions,MEMORY=$OVERRIDE_MEMORY"
-        fi
-    fi
-    
-    if [ ! -z "$OVERRIDE_CPU" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="CPU=$OVERRIDE_CPU"
-        else
-            substitutions="$substitutions,CPU=$OVERRIDE_CPU"
-        fi
-    fi
-    
-    if [ ! -z "$OVERRIDE_PARALLELISM" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="PARALLELISM=$OVERRIDE_PARALLELISM"
-        else
-            substitutions="$substitutions,PARALLELISM=$OVERRIDE_PARALLELISM"
-        fi
-    fi
-    
-    if [ ! -z "$OVERRIDE_TASK_COUNT" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="TASK_COUNT=$OVERRIDE_TASK_COUNT"
-        else
-            substitutions="$substitutions,TASK_COUNT=$OVERRIDE_TASK_COUNT"
-        fi
-    fi
-    
-    if [ ! -z "$OVERRIDE_MAX_RETRIES" ]; then
-        if [ -z "$substitutions" ]; then
-            substitutions="MAX_RETRIES=$OVERRIDE_MAX_RETRIES"
-        else
-            substitutions="$substitutions,MAX_RETRIES=$OVERRIDE_MAX_RETRIES"
-        fi
-    fi
-    
-    echo "$substitutions"
-}
+# Note: All overrides are now handled through config.env file modifications
+# The cloudbuild.yaml reads configuration directly from config.env
 
 # Function to execute deployment
 execute_deployment() {
-    local substitutions=$(build_substitutions)
-    
     echo -e "${YELLOW}🚀 Starting Cloud Build deployment...${NC}"
-    echo -e "${BLUE}📋 Substitutions: $substitutions${NC}"
+    echo -e "${BLUE}📋 All configuration loaded from config.env${NC}"
     
-    # Build the gcloud command
-    local cmd="gcloud builds submit"
-    
-    # Add additional substitutions if provided
-    if [ ! -z "$substitutions" ]; then
-        cmd="$cmd --substitutions=$substitutions"
+    # Load configuration to get dynamic values
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
     fi
+    
+    local region="${REGION:-europe-west1}"
+    local artifact_repo="${ARTIFACT_REGISTRY_REPO:-okrs-scraper-repo}"
+    
+    # Build the gcloud command - execute from parent directory for full context
+    local cmd="gcloud builds submit --config=deployment/cloudbuild.yaml"
     
     # Add async flag if requested
     if [ "$ASYNC_DEPLOY" = true ]; then
@@ -204,9 +122,12 @@ execute_deployment() {
     fi
     
     echo -e "${BLUE}📋 Command: $cmd${NC}"
+    echo -e "${BLUE}📋 Executing from parent directory for full build context${NC}"
+    echo -e "${BLUE}📋 Region: $region, Artifact Repo: $artifact_repo${NC}"
     echo
     
-    # Execute the command
+    # Execute the command from parent directory
+    cd ..
     eval "$cmd"
     
     if [ $? -eq 0 ]; then

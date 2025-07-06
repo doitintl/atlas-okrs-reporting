@@ -9,14 +9,14 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files
-COPY pyproject.toml uv.lock ./
-
 # Install uv for dependency management
 RUN pip install uv
 
-# Install project dependencies
-RUN uv sync --frozen
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
+
+# Install project dependencies using uv
+RUN uv sync --frozen --no-dev
 
 # Copy source code
 COPY src/ /app/src/
@@ -29,5 +29,5 @@ USER appuser
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Command to run the job (no web server needed)
-CMD ["python", "src/cloud_run_okrs_job.py"] 
+# Command to run the job using uv run
+CMD ["uv", "run", "src/cloud_run_okrs_job.py"] 

@@ -1,0 +1,27 @@
+# Cloud Build ignore file
+# This file overrides .gitignore for Cloud Build context
+
+# Include config.env (needed for Cloud Build)
+!config.env
+
+# Exclude unnecessary files for Cloud Build
+.git/
+.venv/
+*.pyc
+__pycache__/
+*.log
+.DS_Store
+.cursor/
+scraped/
+data_snapshots/
+okr_fix_messages.txt
+# Note: uv.lock is needed for Docker builds
+
+# Exclude development files
+*.bak
+*.tmp
+*.test
+
+# Documentation not needed for build
+*.md
+!README.md 

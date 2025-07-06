@@ -1,5 +1,5 @@
 # Cloud Build configuration for OKRs Scraper Job
-# This file automates the build and deployment process for Cloud Run Jobs
+# Simplified version to handle environment variables with spaces correctly
 
 steps:
   # Step 1: Load configuration from config.env
@@ -9,50 +9,51 @@ steps:
       - '-c'
       - |
         # Check if config.env exists
-        if [ ! -f ../config.env ]; then
-          echo "ERROR: ../config.env file not found!"
-          echo "Please ensure ../config.env is properly configured before deployment"
+        if [ ! -f config.env ]; then
+          echo "ERROR: config.env file not found!"
           exit 1
         fi
         
-        # Load config.env and export environment variables for Cloud Run Job
-        source ../config.env
+        # Load config.env 
+        source config.env
         
-        # Note: PROJECT_ID is automatically available in Cloud Build
-        # If not set in config.env, Cloud Build's PROJECT_ID will be used
+        # Set defaults
+        REGION=$${REGION:-europe-west1}
+        ARTIFACT_REGISTRY_REPO=$${ARTIFACT_REGISTRY_REPO:-okrs-scraper-repo}
+        JOB_NAME=$${JOB_NAME:-okrs-scraper-job}
+        ENVIRONMENT=$${ENVIRONMENT:-production}
+        MEMORY=$${MEMORY:-2Gi}
+        CPU=$${CPU:-1}
+        TASK_TIMEOUT=$${TASK_TIMEOUT:-3600s}
+        PARALLELISM=$${PARALLELISM:-1}
+        MAX_RETRIES=$${MAX_RETRIES:-3}
         
-        # Create environment variables file for Cloud Run Job
-        cat > /workspace/cloud_run_env.txt << EOF
-        ATLASSIAN_BASE_URL=$${ATLASSIAN_BASE_URL}
-        ORGANIZATION_ID=$${ORGANIZATION_ID}
-        CLOUD_ID=$${CLOUD_ID}
-        BQ_PROJECT=$${BQ_PROJECT}
-        BQ_DATASET=$${BQ_DATASET}
-        BQ_TABLE=$${BQ_TABLE}
-        BQ_TEAMS_TABLE=$${BQ_TEAMS_TABLE}
-        CRE_TEAMS=$${CRE_TEAMS}
-        EXCLUDE_TEAMS=$${EXCLUDE_TEAMS}
-        US_PEOPLE=$${US_PEOPLE}
-        GCS_BUCKET_NAME=${PROJECT_ID}-okrs-data
-        GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
-        EOF
+        # Export all variables
+        echo "export REGION=$$REGION" > /workspace/config_vars.sh
+        echo "export ARTIFACT_REGISTRY_REPO=$$ARTIFACT_REGISTRY_REPO" >> /workspace/config_vars.sh
+        echo "export JOB_NAME=$$JOB_NAME" >> /workspace/config_vars.sh
+        echo "export ENVIRONMENT=$$ENVIRONMENT" >> /workspace/config_vars.sh
+        echo "export MEMORY=$$MEMORY" >> /workspace/config_vars.sh
+        echo "export CPU=$$CPU" >> /workspace/config_vars.sh
+        echo "export TASK_TIMEOUT=$$TASK_TIMEOUT" >> /workspace/config_vars.sh
+        echo "export PARALLELISM=$$PARALLELISM" >> /workspace/config_vars.sh
+        echo "export MAX_RETRIES=$$MAX_RETRIES" >> /workspace/config_vars.sh
         
-        # Create substitutions file for Cloud Build
-        cat > /workspace/build_substitutions.txt << EOF
-        _REGION=$${REGION}
-        _ARTIFACT_REGISTRY_REPO=$${ARTIFACT_REGISTRY_REPO}
-        _JOB_NAME=$${JOB_NAME}
-        _ENVIRONMENT=$${ENVIRONMENT}
-        _MEMORY=$${MEMORY}
-        _CPU=$${CPU}
-        _TASK_TIMEOUT=$${TASK_TIMEOUT}
-        _PARALLELISM=$${PARALLELISM}
-        _TASK_COUNT=$${TASK_COUNT}
-        _MAX_RETRIES=$${MAX_RETRIES}
-        EOF
+        # Export app environment variables
+        echo "export ATLASSIAN_BASE_URL=\"$${ATLASSIAN_BASE_URL}\"" >> /workspace/config_vars.sh
+        echo "export ORGANIZATION_ID=\"$${ORGANIZATION_ID}\"" >> /workspace/config_vars.sh
+        echo "export CLOUD_ID=\"$${CLOUD_ID}\"" >> /workspace/config_vars.sh
+        echo "export BQ_PROJECT=\"$${BQ_PROJECT:-${PROJECT_ID}}\"" >> /workspace/config_vars.sh
+        echo "export BQ_DATASET=\"$${BQ_DATASET:-okrs_dataset}\"" >> /workspace/config_vars.sh
+        echo "export BQ_TABLE=\"$${BQ_TABLE:-okrs}\"" >> /workspace/config_vars.sh
+        echo "export BQ_TEAMS_TABLE=\"$${BQ_TEAMS_TABLE:-teams}\"" >> /workspace/config_vars.sh
+        echo "export GCS_BUCKET_NAME=\"${PROJECT_ID}-okrs-data\"" >> /workspace/config_vars.sh
+        echo "export GOOGLE_CLOUD_PROJECT=\"${PROJECT_ID}\"" >> /workspace/config_vars.sh
         
-        echo "✅ Configuration loaded successfully from ../config.env"
-        echo "📋 Environment variables prepared for Cloud Run Job deployment"
+        # Note: CRE_TEAMS, EXCLUDE_TEAMS, and US_PEOPLE are used by analysis tools, 
+        # not by the Cloud Run job itself, so we don't pass them as env vars
+        
+        echo "✅ Configuration loaded successfully"
     id: 'load-config'
 
   # Step 2: Build the Docker image
@@ -61,133 +62,75 @@ steps:
     args:
       - '-c'
       - |
-        # Load build configuration
-        source /workspace/build_substitutions.txt
-        
-        # Build Docker image
+        source /workspace/config_vars.sh
         docker build \
-          --tag $_REGION-docker.pkg.dev/${PROJECT_ID}/$_ARTIFACT_REGISTRY_REPO/okrs-scraper-job:${SHORT_SHA} \
-          --tag $_REGION-docker.pkg.dev/${PROJECT_ID}/$_ARTIFACT_REGISTRY_REPO/okrs-scraper-job:latest \
+          --tag $$REGION-docker.pkg.dev/${PROJECT_ID}/$$ARTIFACT_REGISTRY_REPO/okrs-scraper-job:${BUILD_ID} \
+          --tag $$REGION-docker.pkg.dev/${PROJECT_ID}/$$ARTIFACT_REGISTRY_REPO/okrs-scraper-job:latest \
           -f deployment/Dockerfile \
           .
-        
         echo "✅ Docker image built successfully"
     id: 'build-image'
     waitFor: ['load-config']
 
-  # Step 3: Push the image to Artifact Registry
+  # Step 3: Push the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # Load build configuration
-        source /workspace/build_substitutions.txt
-        
-        # Push images
-        docker push $_REGION-docker.pkg.dev/${PROJECT_ID}/$_ARTIFACT_REGISTRY_REPO/okrs-scraper-job:${SHORT_SHA}
-        docker push $_REGION-docker.pkg.dev/${PROJECT_ID}/$_ARTIFACT_REGISTRY_REPO/okrs-scraper-job:latest
-        
-        echo "✅ Images pushed to Artifact Registry"
-    id: 'push-images'
+        source /workspace/config_vars.sh
+        docker push $$REGION-docker.pkg.dev/${PROJECT_ID}/$$ARTIFACT_REGISTRY_REPO/okrs-scraper-job:${BUILD_ID}
+        docker push $$REGION-docker.pkg.dev/${PROJECT_ID}/$$ARTIFACT_REGISTRY_REPO/okrs-scraper-job:latest
+        echo "✅ Docker image pushed successfully"
+    id: 'push-image'
     waitFor: ['build-image']
 
-  # Step 4: Deploy to Cloud Run Jobs with security configuration
+  # Step 4: Deploy to Cloud Run Jobs  
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # Read environment variables from the file created in load-config step
-        ENV_VARS=""
-        while IFS='=' read -r key value; do
-          if [[ ! -z "$key" && ! "$key" =~ ^[[:space:]]*# ]]; then
-            ENV_VARS="$ENV_VARS$key=$value,"
-          fi
-        done < /workspace/cloud_run_env.txt
+        source /workspace/config_vars.sh
         
-        # Remove trailing comma
-        ENV_VARS=$${ENV_VARS%,}
-        
-        # Load deployment configuration from config.env
-        source /workspace/build_substitutions.txt
-        
-        # Check if job already exists
-        if gcloud run jobs describe $_JOB_NAME --region $_REGION &>/dev/null; then
-          echo "📋 Job already exists, replacing..."
-          DEPLOY_CMD="gcloud run jobs replace"
+        # Check if job exists
+        if gcloud run jobs describe $$JOB_NAME --region $$REGION &>/dev/null; then
+          echo "📋 Updating existing job..."
+          DEPLOY_CMD="gcloud run jobs update $$JOB_NAME"
         else
           echo "📋 Creating new job..."
-          DEPLOY_CMD="gcloud run jobs create $_JOB_NAME"
+          DEPLOY_CMD="gcloud run jobs create $$JOB_NAME"
         fi
         
-        # Deploy to Cloud Run Jobs
-        $DEPLOY_CMD \
-          --image $_REGION-docker.pkg.dev/${PROJECT_ID}/$_ARTIFACT_REGISTRY_REPO/okrs-scraper-job:${SHORT_SHA} \
-          --region $_REGION \
+        # Deploy with environment variables (removing invalid --task-count argument)
+        if $$DEPLOY_CMD \
+          --image $$REGION-docker.pkg.dev/${PROJECT_ID}/$$ARTIFACT_REGISTRY_REPO/okrs-scraper-job:${BUILD_ID} \
+          --region $$REGION \
           --service-account okrs-scraper-sa@${PROJECT_ID}.iam.gserviceaccount.com \
-          --memory $_MEMORY \
-          --cpu $_CPU \
-          --task-timeout $_TASK_TIMEOUT \
-          --parallelism $_PARALLELISM \
-          --task-count $_TASK_COUNT \
-          --max-retries $_MAX_RETRIES \
-          --set-env-vars "$ENV_VARS" \
-          --labels environment=$_ENVIRONMENT,component=okrs-scraper-job,managed-by=cloud-build
-        
-        echo "✅ Cloud Run Job deployment completed successfully"
+          --memory $$MEMORY \
+          --cpu $$CPU \
+          --task-timeout $$TASK_TIMEOUT \
+          --parallelism $$PARALLELISM \
+          --max-retries $$MAX_RETRIES \
+          --set-env-vars "ATLASSIAN_BASE_URL=$$ATLASSIAN_BASE_URL,ORGANIZATION_ID=$$ORGANIZATION_ID,CLOUD_ID=$$CLOUD_ID,BQ_PROJECT=$$BQ_PROJECT,BQ_DATASET=$$BQ_DATASET,BQ_TABLE=$$BQ_TABLE,BQ_TEAMS_TABLE=$$BQ_TEAMS_TABLE,GCS_BUCKET_NAME=$$GCS_BUCKET_NAME,GOOGLE_CLOUD_PROJECT=$$GOOGLE_CLOUD_PROJECT" \
+          --labels environment=$$ENVIRONMENT,component=okrs-scraper-job; then
+          echo "✅ Deployment completed successfully"
+        else
+          echo "❌ Deployment failed"
+          exit 1
+        fi
     id: 'deploy-cloud-run-job'
-    waitFor: ['push-images', 'load-config']
-
-  # Step 5: Verify deployment
-  - name: 'gcr.io/cloud-builders/gcloud'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        # Load build configuration
-        source /workspace/build_substitutions.txt
-        
-        # Verify deployment
-        gcloud run jobs describe $_JOB_NAME --region $_REGION --format='table(
-          metadata.name,
-          metadata.labels.environment,
-          spec.template.spec.template.spec.containers[0].image,
-          status.conditions[0].type,
-          status.conditions[0].status
-        )'
-        
-        echo "✅ Deployment verified successfully"
-        echo "🔧 Test commands:"
-        echo "  # Execute job manually:"
-        echo "  gcloud run jobs execute $_JOB_NAME --region $_REGION"
-        echo "  # Check execution status:"
-        echo "  gcloud run jobs executions list --job $_JOB_NAME --region $_REGION"
-        echo "  # View logs:"
-        echo "  gcloud run jobs executions logs <EXECUTION_NAME> --region $_REGION"
-    id: 'verify-deployment'
-    waitFor: ['deploy-cloud-run-job']
-
-# All configuration is loaded from config.env file
-# No substitutions needed - everything is read dynamically
+    waitFor: ['push-image']
 
 # Build configuration
 options:
-  # Use higher performance machine for faster builds
   machineType: 'E2_HIGHCPU_8'
-  
-  # Enable detailed logging
   logging: 'CLOUD_LOGGING_ONLY'
 
-# Configure build timeout
-timeout: '1200s'  # 20 minutes
+timeout: '1200s'
 
-# Tags for organization
 tags:
   - 'okrs-scraper'
   - 'cloud-run-job'
-  - 'artifact-registry'
-  - 'security-hardened'
 
-# Cloud Build will use the default service account with necessary permissions
-# The setup_cloud_infrastructure.sh script configures the required IAM roles 
+ 
