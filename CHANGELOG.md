@@ -1,5 +1,38 @@
 # Changelog - Atlas OKRs Reporting
 
+## [2025-07-06] - Critical bug fix: Null handling in Cloud Run Python implementation
+
+### 🐛 Bug Fixed
+
+#### ⚠️ Issue: Data loss due to null field handling
+- **Problem**: Cloud Run Python implementation was losing ~20 goals (324 vs 344) compared to bash script
+- **Root cause**: `'NoneType' object has no attribute 'get'` errors when processing goals with null fields
+- **Impact**: Missing goals with null values in fields like `owner`, `progress`, `parentGoal`, etc.
+
+#### ✅ Solution: Robust null handling
+- **Fixed null field processing** in `src/cloud_run_okrs_job.py`:
+  - `owner_info = goal_data.get('owner') or {}` (instead of `goal_data.get('owner', {})`)
+  - `progress_info = goal_data.get('progress') or {}` 
+  - `parent_goal = goal_data.get('parentGoal') or {}`
+  - Similar fixes for `pii`, `subGoals`, `tags`, `teamsV2`, `customFields`, `values`
+
+#### 🎯 Results
+- **✅ Perfect parity**: Both bash and Python implementations now process exactly 344 goals
+- **✅ No data loss**: All goals with null fields are now processed correctly
+- **✅ Error elimination**: Completely resolved `'NoneType' object has no attribute 'get'` errors
+
+### 🛠️ Technical Details
+- **Problem pattern**: When JSON field exists but has `null` value, `.get('field', {})` returns `None`, not `{}`
+- **Solution pattern**: Use `goal_data.get('field') or {}` to handle null values correctly
+- **Affected fields**: `owner`, `progress`, `parentGoal`, `pii`, `subGoals`, `tags`, `teamsV2`, `customFields`, `values`
+
+### 📊 Verification
+- **Bash script**: 344 goals processed ✅
+- **Cloud Run (before fix)**: 323 goals processed ❌
+- **Cloud Run (after fix)**: 344 goals processed ✅
+
+---
+
 ## [2025-06-23] - Enhanced aggregation analysis
 
 ### ✅ New Features

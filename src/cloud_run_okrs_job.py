@@ -38,16 +38,12 @@ import pandas as pd
 
 # Configure logging for Cloud Run Jobs
 def setup_logging():
-    """Configure structured logging for Cloud Run Jobs"""
-    # Use Cloud Logging in production
-    if os.getenv('GOOGLE_CLOUD_PROJECT'):
-        client = cloud_logging.Client()
-        client.setup_logging()
-    
-    # Configure the main logger
+    """Configure simple logging for Cloud Run Jobs"""
+    # Use simple logging - Cloud Run automatically captures stdout/stderr
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        force=True  # Override any existing logging configuration
     )
     
     return logging.getLogger(__name__)
@@ -92,6 +88,12 @@ class CloudRunOKRScraper:
         self.custom_field_uuid = self._get_secret('custom-field-uuid')
         self.cookies = self._get_secret('atlassian-cookies')
         
+        # Debug: log UUID values to verify they're clean
+        logger.info(f"🔍 workspace_uuid: '{self.workspace_uuid}'")
+        logger.info(f"🔍 directory_view_uuid: '{self.directory_view_uuid}'")
+        logger.info(f"🔍 custom_field_uuid: '{self.custom_field_uuid}'")
+        logger.info(f"🔍 cookies length: {len(self.cookies)} chars")
+        
         # Cloud Storage configuration
         self.bucket_name = os.getenv('GCS_BUCKET_NAME')
         self.storage_client = storage.Client()
@@ -130,8 +132,8 @@ class CloudRunOKRScraper:
             # Access the secret version
             response = self.secret_client.access_secret_version(request={"name": name})
             
-            # Decode the secret payload
-            secret_value = response.payload.data.decode("UTF-8")
+            # Decode the secret payload and clean it
+            secret_value = response.payload.data.decode("UTF-8").strip()
             logger.info(f"✅ Successfully retrieved secret: {secret_name}")
             return secret_value
             
@@ -168,84 +170,30 @@ class CloudRunOKRScraper:
         logger.info("✅ Configuration validated successfully")
     
     def get_goal_details(self, goal_key: str, depth: int = 0) -> Optional[Dict]:
-        """Get details of a specific goal"""
+        """Get details of a specific goal using EXACT query from bash script"""
         indent = "  " * depth
         logger.info(f"{indent}📋 [Level {depth}] Getting details: {goal_key}")
         
-        # Payload for GraphQL query
+        # Payload for GraphQL query - EXACT copy from bash script
         payload = {
-            "query": """
-                query GoalViewAsideQuery($key: String!, $trackViewEvent: TrackViewEvent, $isNavRefreshEnabled: Boolean!, $containerId: String!) {
-                    workspaceGoalTypes: townsquare {
-                        goalTypes(containerId: $containerId) {
-                            edges {
-                                node {
-                                    __typename
-                                    id
-                                }
-                            }
-                        }
-                    }
-                    goal: goalByKey(key: $key, trackViewEvent: $trackViewEvent) @include(if: $isNavRefreshEnabled) {
-                        owner {
-                            aaid
-                            id
-                            pii {
-                                name
-                                email
-                                accountId
-                            }
-                        }
-                        key
-                        name
-                        archived
-                        targetDate
-                        startDate
-                        createdAt
-                        contextualizedTags {
-                            edges {
-                                node {
-                                    name
-                                    __typename
-                                }
-                            }
-                        }
-                        progressType
-                        parentGoal {
-                            __typename
-                            key
-                        }
-                        subgoals {
-                            edges {
-                                node {
-                                    __typename
-                                    key
-                                }
-                            }
-                        }
-                        customFields {
-                            edges {
-                                node {
-                                    __typename
-                                    id
-                                    value
-                                }
-                            }
-                        }
-                    }
-                }
-            """,
+            "query": "query GoalViewAsideQuery($key: String!, $trackViewEvent: TrackViewEvent, $isNavRefreshEnabled: Boolean!, $containerId: String!) { workspaceGoalTypes: townsquare { goalTypes(containerId: $containerId) { edges { node { __typename id } } } } goal: goalByKey(key: $key, trackViewEvent: $trackViewEvent) @include(if: $isNavRefreshEnabled) { owner { aaid id pii { name email accountId } } key name archived targetDate startDate creationDate progress { type percentage } parentGoal { key name } subGoals { edges { node { key name archived } } } tags { edges { node { name } } } teamsV2 { edges { node { name teamId } } } customFields { edges { node { ... on TextSelectCustomField { values { edges { node { value } } } } } } } id } }",
             "variables": {
                 "key": goal_key,
-                "trackViewEvent": {"eventName": "goal.viewed"},
+                "trackViewEvent": "DIRECT",
                 "isNavRefreshEnabled": True,
-                "containerId": self.workspace_uuid
+                "containerId": f"ari:cloud:townsquare::site/{self.cloud_id}"
             }
         }
         
-        # Make request
-        url = f"{self.base_url}/gateway/api/graphql"
-        headers = {**self.headers, 'cookie': self.cookies}
+        # Use EXACT endpoint from bash script
+        url = f"{self.base_url}/gateway/api/townsquare/s/{self.cloud_id}/graphql?operationName=GoalViewAsideQuery"
+        
+        # Use EXACT headers from bash script
+        headers = {
+            **self.headers, 
+            'cookie': self.cookies,
+            'referer': f"{self.base_url}/o/{self.organization_id}/s/{self.cloud_id}/goal/{goal_key}"
+        }
         
         try:
             response = requests.post(url, json=payload, headers=headers)
@@ -266,11 +214,11 @@ class CloudRunOKRScraper:
             return None
     
     def process_goal_data(self, goal_data: Dict) -> Optional[OKRData]:
-        """Process goal data and return OKRData object"""
+        """Process goal data and return OKRData object using EXACT field names from bash script"""
         try:
-            # Extract owner information
-            owner_info = goal_data.get('owner', {})
-            pii_info = owner_info.get('pii', {})
+            # Extract owner information - handle None values
+            owner_info = goal_data.get('owner') or {}
+            pii_info = owner_info.get('pii') or {}
             owner_name = pii_info.get('name', 'Unknown')
             
             # Extract basic goal information
@@ -278,35 +226,41 @@ class CloudRunOKRScraper:
             goal_name = goal_data.get('name', '')
             target_date = goal_data.get('targetDate', '')
             start_date = goal_data.get('startDate', '')
-            created_at = goal_data.get('createdAt', '')
+            created_at = goal_data.get('creationDate', '')  # bash script uses 'creationDate'
             archived = goal_data.get('archived', False)
-            progress_type = goal_data.get('progressType', '')
             
-            # Extract parent goal
-            parent_goal = goal_data.get('parentGoal', {})
-            parent_goal_key = parent_goal.get('key', '') if parent_goal else ''
+            # Extract progress type from nested progress object - handle None values
+            progress_info = goal_data.get('progress') or {}
+            progress_type = progress_info.get('type', '')
             
-            # Extract subgoals
-            subgoals_data = goal_data.get('subgoals', {}).get('edges', [])
+            # Extract parent goal - handle None values
+            parent_goal = goal_data.get('parentGoal') or {}
+            parent_goal_key = parent_goal.get('key', '')
+            
+            # Extract subgoals using 'subGoals' field name from bash script - handle None values
+            subgoals_data = (goal_data.get('subGoals') or {}).get('edges', [])
             subgoals = [edge['node']['key'] for edge in subgoals_data if edge.get('node', {}).get('key')]
             
-            # Extract tags
-            tags_data = goal_data.get('contextualizedTags', {}).get('edges', [])
+            # Extract tags using 'tags' field name from bash script - handle None values
+            tags_data = (goal_data.get('tags') or {}).get('edges', [])
             tags = [edge['node']['name'] for edge in tags_data if edge.get('node', {}).get('name')]
             
-            # Extract teams from custom fields
-            custom_fields = goal_data.get('customFields', {}).get('edges', [])
-            teams = []
+            # Extract teams from 'teamsV2' field from bash script - handle None values
+            teams_data = (goal_data.get('teamsV2') or {}).get('edges', [])
+            teams = [edge['node']['name'] for edge in teams_data if edge.get('node', {}).get('name')]
+            
+            # Extract lineage from custom fields (bash script logic) - handle None values
+            custom_fields = (goal_data.get('customFields') or {}).get('edges', [])
+            lineage = goal_key  # default to goal_key
             for field in custom_fields:
                 field_node = field.get('node', {})
-                if field_node.get('id') == self.custom_field_uuid:
-                    teams_value = field_node.get('value', '')
-                    if teams_value:
-                        teams = [team.strip() for team in teams_value.split(',')]
-                    break
-            
-            # Generate lineage (will be updated in recursive processing)
-            lineage = goal_key
+                # Extract first available custom field value (bash script logic) - handle None values
+                values = (field_node.get('values') or {}).get('edges', [])
+                if values:
+                    first_value = values[0].get('node', {}).get('value', '')
+                    if first_value:
+                        lineage = first_value
+                        break
             
             # Create OKRData object
             okr_data = OKRData(
@@ -362,78 +316,73 @@ class CloudRunOKRScraper:
         """Get initial snapshot of goals from directory view"""
         logger.info("📊 Getting initial snapshot of goals...")
         
-        # GraphQL query for directory view
+        # GraphQL query - EXACT copy from working bash script
         payload = {
-            "query": """
-                query DirectoryViewQuery($first: Int!, $after: String, $directoryViewUuid: String!) {
-                    directoryView(uuid: $directoryViewUuid) {
-                        goals(first: $first, after: $after) {
-                            pageInfo {
-                                hasNextPage
-                                endCursor
-                            }
-                            edges {
-                                node {
-                                    key
-                                    name
-                                    owner {
-                                        pii {
-                                            name
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            """,
+            "query": "query Goals(\n  $after: String\n  $containerId: String\n  $directoryViewUuid: UUID\n  $first: Int = 50\n  $includeFollowerCount: Boolean!\n  $includeFollowing: Boolean!\n  $includeLastUpdated: Boolean!\n  $includeOwner: Boolean!\n  $includeRelatedProjects: Boolean!\n  $includeStatus: Boolean!\n  $includeTags: Boolean!\n  $includeTargetDate: Boolean!\n  $includeTeam: Boolean!\n  $includedCustomFieldUuids: [UUID!]\n  $skipTableTql: Boolean!\n  $sorts: [GoalSortEnum]\n  $tql: String\n  $workspaceUuid: UUID\n) {\n  ...DirectoryTableViewGoal_3JCCLt\n}\n\nfragment CustomFieldCell on CustomFieldConnection {\n  edges {\n    node {\n      __typename\n      ... on CustomFieldNode {\n        __isCustomFieldNode: __typename\n        definition {\n          __typename\n          ... on CustomFieldDefinitionNode {\n            __isCustomFieldDefinitionNode: __typename\n            uuid\n          }\n          ... on Node {\n            __isNode: __typename\n            id\n          }\n        }\n      }\n      ...NumberFieldColumn\n      ...TextSelectFieldColumn\n      ...UserFieldColumn\n      ...TextFieldColumn\n      ... on Node {\n        __isNode: __typename\n        id\n      }\n    }\n  }\n}\n\nfragment DirectoryRow_367brx on Goal {\n  id\n  ari\n  key\n  hasSubgoalMatches\n  latestUpdateDate @include(if: $includeLastUpdated)\n  ...GoalNameColumn\n  ...GoalFollowButton @include(if: $includeFollowing)\n  ...GoalActions\n  dueDate @include(if: $includeTargetDate) {\n    ...TargetDate\n  }\n  state @include(if: $includeStatus) {\n    ...GoalState\n  }\n  owner @include(if: $includeOwner) {\n    ...UserAvatar_2aqwkz\n    id\n  }\n  projects @include(if: $includeRelatedProjects) {\n    ...RelatedGoalProjects\n  }\n  teamsV2 @include(if: $includeTeam) {\n    ...TeamOfGoal\n  }\n  tags @include(if: $includeTags) {\n    ...TagColumn\n  }\n  ...FollowerCount_goal @include(if: $includeFollowerCount)\n  customFields(includedCustomFieldUuids: $includedCustomFieldUuids) {\n    ...CustomFieldCell\n  }\n  ...MetricColumn\n}\n\nfragment DirectoryTableViewGoal_3JCCLt on Query {\n  goalTqlFullHierarchy(first: $first, after: $after, q: $tql, workspaceUuid: $workspaceUuid, containerId: $containerId, sorts: $sorts, directoryViewUuid: $directoryViewUuid) @skip(if: $skipTableTql) {\n    count\n    edges {\n      node {\n        id\n        ari\n        ...RootDirectoryRow_367brx\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }\n  currentUser {\n    preferences {\n      wrapTextEnabled\n      id\n    }\n    id\n  }\n}\n\nfragment FollowerCount_goal on Goal {\n  ...GoalFollowersButton\n}\n\nfragment GoalActions on Goal {\n  id\n  name\n  archived\n  parentGoal {\n    id\n  }\n  subGoals {\n    edges {\n      node {\n        archived\n        id\n      }\n    }\n  }\n}\n\nfragment GoalFollowButton on Goal {\n  id\n  uuid\n  watching\n}\n\nfragment GoalFollowersButton on Goal {\n  key\n  watchers {\n    count\n  }\n}\n\nfragment GoalName on Goal {\n  uuid\n  id\n  key\n  ...PlatformGoalIcon\n  name\n}\n\nfragment GoalNameColumn on Goal {\n  id\n  managerData {\n    managers {\n      managerProfile {\n        name\n      }\n      directReports\n    }\n  }\n  ...GoalName\n}\n\nfragment GoalState on GoalState {\n  label(includeScore: false)\n  localizedLabel {\n    messageId\n  }\n  score\n  goalStateValue: value\n  atCompletionState {\n    label(includeScore: false)\n    localizedLabel {\n      messageId\n    }\n    value\n    score\n  }\n}\n\nfragment MetricChart on Goal {\n  ...WrappedWithMetricPopup\n  id\n  progress {\n    type\n    percentage\n  }\n  subGoals {\n    count\n  }\n  metricTargets {\n    edges {\n      node {\n        ...common_metricTarget_direct\n        id\n      }\n    }\n  }\n}\n\nfragment MetricColumn on Goal {\n  id\n  uuid\n  ...progressBarMetricTarget\n  ...hasMetric\n  ...MetricChart\n}\n\nfragment NumberFieldColumn on NumberCustomField {\n  value {\n    numberValue: value\n    id\n  }\n}\n\nfragment PlatformGoalIcon on Goal {\n  icon {\n    key\n    appearance\n  }\n}\n\nfragment ProjectIcon on Project {\n  private\n  iconUrl {\n    square {\n      light\n      dark\n      transparent\n    }\n  }\n}\n\nfragment ProjectName_data on Project {\n  id\n  key\n  name\n  uuid\n  ...ProjectIcon\n}\n\nfragment RelatedGoalProjects on ProjectConnection {\n  count\n  edges {\n    node {\n      ...ProjectName_data\n      id\n    }\n  }\n}\n\nfragment RootDirectoryRow_367brx on Goal {\n  id\n  ...DirectoryRow_367brx\n}\n\nfragment Tag on Tag {\n  ...Tag_createTagOption\n}\n\nfragment TagColumn on TagConnection {\n  edges {\n    node {\n      ...Tag\n      id\n    }\n  }\n  count\n}\n\nfragment Tag_createTagOption on Tag {\n  id\n  name\n  uuid\n  description\n  projectUsageCount\n  goalUsageCount\n  helpPointerUsageCount\n  watcherCount\n}\n\nfragment TargetDate on TargetDate {\n  confidence\n  label\n  localizedLabel {\n    messageId\n  }\n  tooltip: label(longFormat: true)\n  localizedTooltip: localizedLabel(longFormat: true) {\n    messageId\n  }\n  overdue\n}\n\nfragment TeamOfGoal on GoalTeamConnection {\n  edges {\n    node {\n      avatarUrl\n      name\n      teamId\n      id\n    }\n  }\n  count\n}\n\nfragment TextFieldColumn on TextCustomField {\n  value {\n    textValue: value\n    id\n  }\n}\n\nfragment TextSelectFieldColumn on TextSelectCustomField {\n  definition {\n    __typename\n    ... on TextSelectCustomFieldDefinition {\n      canSetMultipleValues\n    }\n    ... on Node {\n      __isNode: __typename\n      id\n    }\n  }\n  values {\n    count\n    edges {\n      node {\n        id\n        value\n      }\n    }\n  }\n}\n\nfragment UserAvatar_2aqwkz on User {\n  aaid\n  pii {\n    picture\n    accountId\n    name\n  }\n}\n\nfragment UserFieldColumn on UserCustomField {\n  definition {\n    __typename\n    ... on UserCustomFieldDefinition {\n      canSetMultipleValues\n    }\n    ... on Node {\n      __isNode: __typename\n      id\n    }\n  }\n  values {\n    count\n    edges {\n      node {\n        pii {\n          accountId\n          name\n          picture\n        }\n        id\n      }\n    }\n  }\n}\n\nfragment WrappedWithMetricPopup on Goal {\n  id\n  progress {\n    percentage\n  }\n  metricTargets {\n    edges {\n      node {\n        ...common_metricTarget_direct\n        metric {\n          archived\n          id\n        }\n        id\n      }\n    }\n  }\n}\n\nfragment common_metricTarget_direct on MetricTarget {\n  startValue\n  targetValue\n  snapshotValue {\n    value\n    id\n  }\n  metric {\n    id\n    name\n    type\n    subType\n  }\n}\n\nfragment hasMetric on Goal {\n  progress {\n    type\n  }\n  metricTargets {\n    edges {\n      node {\n        metric {\n          archived\n          id\n        }\n        id\n      }\n    }\n  }\n}\n\nfragment progressBarMetricTarget on Goal {\n  progress {\n    type\n    percentage\n  }\n  metricTargets {\n    edges {\n      node {\n        snapshotValue {\n          value\n          id\n        }\n        startValue\n        targetValue\n        metric {\n          type\n          subType\n          id\n        }\n        id\n      }\n    }\n  }\n}\n",
             "variables": {
-                "first": 100,
                 "after": None,
-                "directoryViewUuid": self.directory_view_uuid
+                "containerId": f"ari:cloud:townsquare::site/{self.cloud_id}",
+                "directoryViewUuid": self.directory_view_uuid,
+                "first": 50,
+                "includeFollowerCount": False,
+                "includeFollowing": False,
+                "includeLastUpdated": False,
+                "includeOwner": True,
+                "includeRelatedProjects": False,
+                "includeStatus": False,
+                "includeTags": True,
+                "includeTargetDate": True,
+                "includeTeam": True,
+                "includedCustomFieldUuids": [self.custom_field_uuid],
+                "skipTableTql": False,
+                "sorts": None,
+                "tql": None,
+                "workspaceUuid": self.workspace_uuid
             }
         }
         
-        url = f"{self.base_url}/gateway/api/graphql"
-        headers = {**self.headers, 'cookie': self.cookies}
+        # Use the correct endpoint from bash script
+        url = f"{self.base_url}/gateway/api/townsquare/s/{self.cloud_id}/graphql?operationName=DirectoryTableViewGoalPaginationQuery"
+        
+        # Add referer header like in bash script
+        headers = {
+            **self.headers, 
+            'cookie': self.cookies,
+            'referer': f"{self.base_url}/o/{self.organization_id}/goals?viewUuid={self.directory_view_uuid}&cloudId={self.cloud_id}"
+        }
         
         all_goals = []
         
         try:
-            while True:
-                response = requests.post(url, json=payload, headers=headers)
-                response.raise_for_status()
+            # Make SINGLE request (NO PAGINATION) like bash script
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Debug: log response structure
+            logger.info(f"🔍 Response status: {response.status_code}")
+            logger.info(f"🔍 Response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+            
+            if 'data' not in data or 'goalTqlFullHierarchy' not in data['data']:
+                logger.error("❌ Invalid response structure")
+                logger.error(f"🔍 Full response: {data}")
+                return []
+            
+            goal_hierarchy = data['data']['goalTqlFullHierarchy']
+            if not goal_hierarchy:
+                logger.error("❌ No goals found in hierarchy")
+                return []
+            
+            edges = goal_hierarchy.get('edges', [])
+            
+            for edge in edges:
+                node = edge.get('node', {})
+                goal_key = node.get('key')
                 
-                data = response.json()
-                
-                if 'data' not in data or 'directoryView' not in data['data']:
-                    logger.error("❌ Invalid response structure")
-                    break
-                
-                directory_view = data['data']['directoryView']
-                if not directory_view or 'goals' not in directory_view:
-                    logger.error("❌ No goals found in directory view")
-                    break
-                
-                goals = directory_view['goals']
-                edges = goals.get('edges', [])
-                
-                for edge in edges:
-                    node = edge.get('node', {})
-                    goal_key = node.get('key')
-                    goal_name = node.get('name', 'Unknown')
-                    
-                    if goal_key:
-                        all_goals.append(goal_key)
-                        logger.info(f"📋 Found goal: {goal_name} ({goal_key})")
-                
-                # Check if there are more pages
-                page_info = goals.get('pageInfo', {})
-                if not page_info.get('hasNextPage', False):
-                    break
-                
-                # Update cursor for next page
-                payload['variables']['after'] = page_info.get('endCursor')
+                if goal_key:
+                    all_goals.append(goal_key)
+                    logger.info(f"📋 Found goal: {goal_key}")
                 
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ Error getting initial snapshot: {e}")
@@ -441,53 +390,46 @@ class CloudRunOKRScraper:
         
         logger.info(f"✅ Initial snapshot completed. Found {len(all_goals)} goals")
         return all_goals
-    
+
     def generate_csv_content(self, timestamp: str) -> str:
-        """Generate CSV content from processed OKR data"""
+        """Generate CSV content from processed OKR data matching bash script format"""
         logger.info("📝 Generating CSV content...")
         
-        # Create CSV content in memory
-        csv_buffer = StringIO()
+        # Create CSV content manually to match bash script format exactly
+        csv_lines = []
         
-        # Define CSV headers
-        headers = [
-            'owner_name', 'goal_key', 'target_date', 'goal_name', 'parent_goal_key',
-            'subgoals', 'tags', 'progress_type', 'teams', 'start_date',
-            'creation_date', 'lineage', 'archived'
-        ]
+        # Add CSV header exactly as bash script
+        csv_lines.append('created_at,Owner,Goal Key,Target Date,Name,Parent Goal,Sub-goals,Tags,Progress Type,Teams,Start Date,Creation Date,Lineage')
         
-        writer = csv.DictWriter(csv_buffer, fieldnames=headers)
-        writer.writeheader()
-        
-        # Helper function to clean fields
+        # Helper function to clean fields - using semicolon separator like bash script
         def clean_field(field):
             if isinstance(field, list):
-                return '|'.join(str(item) for item in field)
-            return str(field) if field else ''
+                return ';'.join(str(item) for item in field) if field else 'null'
+            return str(field) if field else 'null'
         
-        # Write data rows
+        # Helper function to clean string fields for CSV (escape commas and quotes)
+        def clean_string_field(field):
+            if not field or field == 'null':
+                return 'null'
+            # Replace commas with semicolons and escape quotes like bash script
+            cleaned = str(field).replace(',', ';').replace('"', '""')
+            return cleaned
+        
+        # Write data rows - filter out archived goals like bash script
         for goal_key, okr_data in self.okr_data.items():
-            row = {
-                'owner_name': clean_field(okr_data.owner_name),
-                'goal_key': clean_field(okr_data.goal_key),
-                'target_date': clean_field(okr_data.target_date),
-                'goal_name': clean_field(okr_data.goal_name),
-                'parent_goal_key': clean_field(okr_data.parent_goal_key),
-                'subgoals': clean_field(okr_data.subgoals),
-                'tags': clean_field(okr_data.tags),
-                'progress_type': clean_field(okr_data.progress_type),
-                'teams': clean_field(okr_data.teams),
-                'start_date': clean_field(okr_data.start_date),
-                'creation_date': clean_field(okr_data.creation_date),
-                'lineage': clean_field(okr_data.lineage),
-                'archived': clean_field(okr_data.archived)
-            }
-            writer.writerow(row)
+            # Skip archived goals (like bash script does)
+            if okr_data.archived:
+                continue
+                
+            # Generate CSV line exactly like bash script
+            csv_line = f'{timestamp},"{clean_string_field(okr_data.owner_name)}","{clean_field(okr_data.goal_key)}","{clean_field(okr_data.target_date)}","{clean_string_field(okr_data.goal_name)}","{clean_field(okr_data.parent_goal_key)}","{clean_field(okr_data.subgoals)}","{clean_field(okr_data.tags)}","{clean_field(okr_data.progress_type)}","{clean_field(okr_data.teams)}","{clean_field(okr_data.start_date)}","{clean_field(okr_data.creation_date)}","{clean_field(okr_data.lineage)}"'
+            csv_lines.append(csv_line)
         
-        csv_content = csv_buffer.getvalue()
-        csv_buffer.close()
+        csv_content = '\n'.join(csv_lines)
         
-        logger.info(f"✅ CSV content generated successfully. {len(self.okr_data)} goals processed")
+        # Count non-archived goals
+        non_archived_count = sum(1 for okr_data in self.okr_data.values() if not okr_data.archived)
+        logger.info(f"✅ CSV content generated successfully. {non_archived_count} goals processed (excluding archived)")
         return csv_content
     
     def upload_to_gcs(self, csv_content: str, filename: str) -> str:
@@ -501,8 +443,8 @@ class CloudRunOKRScraper:
             # Upload CSV content
             blob.upload_from_string(csv_content, content_type='text/csv')
             
-            # Make blob publicly readable for BigQuery
-            blob.make_public()
+            # Note: Bucket has uniform bucket-level access enabled, so we don't set ACLs
+            # The file will be accessible via Cloud Storage for BigQuery integration
             
             public_url = blob.public_url
             logger.info(f"✅ File uploaded successfully: {public_url}")
@@ -517,7 +459,7 @@ class CloudRunOKRScraper:
         logger.info("🚀 Starting OKRs scraping process...")
         
         start_time = time.time()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
         
         try:
             # Step 1: Get initial snapshot
@@ -542,7 +484,7 @@ class CloudRunOKRScraper:
                 raise Exception("Failed to generate CSV content")
             
             # Step 4: Upload to Cloud Storage
-            filename = f"okrs_emea_goals_{timestamp}.csv"
+            filename = f"export-{timestamp}_processed.csv"
             public_url = self.upload_to_gcs(csv_content, filename)
             
             # Calculate execution time

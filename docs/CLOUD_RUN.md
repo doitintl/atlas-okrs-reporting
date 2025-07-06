@@ -87,19 +87,21 @@ gcloud auth configure-docker europe-west1-docker.pkg.dev
 docker build -t europe-west1-docker.pkg.dev/PROJECT_ID/okrs-scraper-repo/okrs-scraper:latest .
 docker push europe-west1-docker.pkg.dev/PROJECT_ID/okrs-scraper-repo/okrs-scraper:latest
 
-# Deploy to Cloud Run
-gcloud run deploy okrs-scraper \
+# Deploy to Cloud Run Job (not Service)
+gcloud run jobs replace job.yaml --region europe-west1
+
+# Or create job manually
+gcloud run jobs create okrs-scraper-job \
     --image europe-west1-docker.pkg.dev/PROJECT_ID/okrs-scraper-repo/okrs-scraper:latest \
     --service-account okrs-scraper-sa@PROJECT_ID.iam.gserviceaccount.com \
     --region europe-west1 \
-    --allow-unauthenticated \
     --memory 2Gi \
     --cpu 1 \
-    --timeout 3600 \
-    --concurrency 1 \
-    --max-instances 10 \
-    --min-instances 0 \
-    --set-env-vars="ATLASSIAN_BASE_URL=https://your-domain.atlassian.net,ORGANIZATION_ID=your-org-id,CLOUD_ID=your-cloud-id,GCS_BUCKET_NAME=PROJECT_ID-okrs-data,GOOGLE_CLOUD_PROJECT=PROJECT_ID,PORT=8080"
+    --task-timeout 3600 \
+    --parallelism 1 \
+    --task-count 1 \
+    --max-retries 3 \
+    --set-env-vars="ATLASSIAN_BASE_URL=https://your-domain.atlassian.net,ORGANIZATION_ID=your-org-id,CLOUD_ID=your-cloud-id,GCS_BUCKET_NAME=PROJECT_ID-okrs-data,GOOGLE_CLOUD_PROJECT=PROJECT_ID"
 ```
 
 ## 🚀 Job Execution
@@ -433,6 +435,30 @@ gsutil mb gs://PROJECT_ID-okrs-data
 gsutil iam ch serviceAccount:okrs-scraper-sa@PROJECT_ID.iam.gserviceaccount.com:roles/storage.objectAdmin gs://PROJECT_ID-okrs-data
 ```
 
+#### 5. Data Loss - Missing Goals (Fixed in v2025-07-06)
+
+**Symptoms:**
+- Cloud Run processing fewer goals than expected
+- Error logs showing `'NoneType' object has no attribute 'get'`
+- Goals with null fields (owner, progress, etc.) not appearing in output
+
+**Previous Error:** `'NoneType' object has no attribute 'get'`
+
+**Root Cause:** When JSON fields contain `null` values, Python's `dict.get('field', {})` returns `None` instead of the default `{}`, causing subsequent `.get()` calls to fail.
+
+**Solution Applied:** ✅ **Fixed in version 2025-07-06**
+- Updated null handling pattern from `goal_data.get('field', {})` to `goal_data.get('field') or {}`
+- Applied to all nested field access: `owner`, `progress`, `parentGoal`, `pii`, `subGoals`, `tags`, etc.
+- Now achieves perfect parity with bash script (344 goals processed)
+
+**Verification:**
+```bash
+# Check goal count in latest execution
+gcloud run jobs executions logs EXECUTION_NAME --region=europe-west1 | grep "goals processed"
+
+# Should show: "✅ CSV content generated successfully. 344 goals processed"
+```
+
 ### Debug Commands
 
 ```bash
@@ -445,10 +471,13 @@ gsutil iam get gs://PROJECT_ID-okrs-data
 # Check secret access
 gcloud secrets versions access latest --secret="workspace-uuid"
 
-# Test service locally
-docker run -p 8080:8080 \
+# Test job locally (no port needed for jobs)
+docker run \
     -e ATLASSIAN_BASE_URL="https://your-domain.atlassian.net" \
     -e ORGANIZATION_ID="your-org-id" \
+    -e CLOUD_ID="your-cloud-id" \
+    -e GCS_BUCKET_NAME="PROJECT_ID-okrs-data" \
+    -e GOOGLE_CLOUD_PROJECT="PROJECT_ID" \
     europe-west1-docker.pkg.dev/PROJECT_ID/okrs-scraper-repo/okrs-scraper:latest
 ```
 
@@ -460,7 +489,7 @@ docker run -p 8080:8080 \
 # Update a secret
 gcloud secrets versions add workspace-uuid --data-file=- <<< "new-value"
 
-# The service will automatically pick up the new secret version
+# The job will automatically pick up the new secret version on next execution
 ```
 
 ### Updating Configuration
@@ -476,8 +505,11 @@ vim config.env
 ### Rollback
 
 ```bash
-# Deploy previous version
-gcloud run deploy okrs-scraper \
+# Deploy previous version of the job
+gcloud run jobs replace job.yaml --region europe-west1
+
+# Or update the job image directly
+gcloud run jobs update okrs-scraper-job \
     --image europe-west1-docker.pkg.dev/PROJECT_ID/okrs-scraper-repo/okrs-scraper:PREVIOUS_SHA \
     --region europe-west1
 ```
