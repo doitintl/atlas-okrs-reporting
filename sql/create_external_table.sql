@@ -83,8 +83,8 @@ SELECT
   END as has_target_date,
   
   CASE 
-    WHEN TRIM(progress_type) = 'ATTACHED_METRIC' THEN true
-    ELSE false
+    WHEN TRIM(progress_type) = 'null' OR TRIM(progress_type) = '' OR TRIM(progress_type) = 'NONE' THEN false
+    ELSE true
   END as has_metric,
   
   CASE 
