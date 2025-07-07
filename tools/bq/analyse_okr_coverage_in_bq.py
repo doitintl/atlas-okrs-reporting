@@ -2,14 +2,17 @@
 Improved coverage analysis that uses the real goal hierarchy in BigQuery
 instead of direct keyword matching.
 
+⚠️  MIGRATED TO EXTERNAL TABLES: This script now uses BigQuery external table views
+   instead of loaded CSV data for better performance and real-time analysis.
+
 Dependencies are managed in pyproject.toml. Install with: uv sync
 """
 import sys
 import os
 from pathlib import Path
 
-# Add helpers directory to path for config loader
-helpers_dir = Path(__file__).parent.parent / "helpers"
+# Add helpers directory to path for config loader (go up 3 levels: bq -> tools -> project root -> helpers)
+helpers_dir = Path(__file__).parent.parent.parent / "helpers"
 sys.path.insert(0, str(helpers_dir))
 
 from config_loader import get_bigquery_config, get_cre_teams, get_us_people
@@ -61,15 +64,10 @@ CORPORATE_OBJECTIVES_TRANSCRIBED = {
 }
 
 def get_all_goals_hierarchy(client):
-    """Get all goal hierarchy from BigQuery"""
-    okrs_query = f'SELECT * FROM `{config["dataset"]}.{config["table"]}`'
+    """Get all goal hierarchy from BigQuery external table views"""
+    # Use latest view instead of raw table - automatically gets most recent data
+    okrs_query = f'SELECT * FROM `{config["dataset"]}.okrs_latest_view`'
     okrs_df = client.query(okrs_query).to_dataframe()
-    
-    if 'created_at' in okrs_df.columns and not okrs_df.empty:
-        okrs_df['created_at'] = pd.to_datetime(okrs_df['created_at'], errors='coerce', format='%Y%m%d%H%M')
-        latest_ts = okrs_df['created_at'].max()
-        okrs_df = okrs_df[okrs_df['created_at'] == latest_ts]
-    
     return okrs_df
 
 def get_cre_members(client):
@@ -479,7 +477,7 @@ def print_final_coverage_report(coverage_results):
         print("❌ LOW COVERAGE - Need more aligned OKRs")
 
 def main():
-    print("🔍 IMPROVED COVERAGE ANALYSIS (USING REAL HIERARCHY)\n")
+    print("🔍 IMPROVED COVERAGE ANALYSIS (USING EXTERNAL TABLES)\n")
     
     client = bigquery.Client(project=config["project"]) if config["project"] else bigquery.Client()
     

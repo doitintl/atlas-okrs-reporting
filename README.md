@@ -58,7 +58,6 @@ okrs-reporting/
 ├── 📊 ORIGINAL BASH SCRIPTS
 │   └── scripts/                         # Original bash scripts
 │       ├── scrap_okrs.sh               # Complete recursive extraction (DFS algorithm)
-│       ├── export_okrs_csv.sh          # Simple snapshot extraction
 │       └── setup_venv_uv.sh            # Virtual environment setup
 ├── 📊 DATA
 │   └── data/                            # Team configuration and data
@@ -70,14 +69,16 @@ okrs-reporting/
 │   ├── config.env                 # Main configuration (not in git)
 │   └── config.env.example         # Configuration template
 ├── helpers/
-│   ├── add_timestamp_to_csv.py    # Helper to add timestamps & load to BigQuery
 │   └── config_loader.py           # Configuration loader for all scripts
 └── tools/
-    ├── analyse_okr_coverage_in_bq.py      # Coverage analysis in BigQuery
     ├── generate_okr_fix_messages.py       # Generate Slack messages for OKR fixes
-    ├── generate_okr_tree_from_bq.py       # Tree generation from BigQuery
-    ├── okrs_sanity_check_bq_data.py       # Sanity check BigQuery data
-    └── okrs_sanity_check_scrap_data.py    # Sanity check scraped data
+    ├── okrs_sanity_check_scrap_data.py    # Sanity check scraped data
+    └── bq/                                 # ✅ BigQuery tools
+        ├── setup_external_table.py        # Setup BigQuery external table
+        ├── run_okr_health_check_bq.py     # BigQuery health check analysis
+        ├── analyse_okr_coverage_in_bq.py  # Corporate objectives coverage analysis
+        ├── generate_okr_tree_from_bq.py   # CRE team goals tree generation
+        └── README.md                      # BigQuery tools documentation
 ```
 
 ## 🔧 Configuration
@@ -185,16 +186,61 @@ curl -X POST https://your-service-url/scrape
 - 📋 **Complete Details** - All goal information and metadata
 - 🚫 **Automatic Filtering** - Excludes archived goals
 
-### Simple Snapshot Extraction
+
+
+## ☁️ BigQuery External Table
+
+### Setup External Table
+
+Create a BigQuery external table to query OKRs data directly from Cloud Storage:
 
 ```bash
-./scripts/export_okrs_csv.sh
+# Preview the SQL commands (dry run)
+python tools/bq/setup_external_table.py --dry-run
+
+# Execute the setup
+python tools/bq/setup_external_table.py
 ```
 
-**Features:**
-- ⚡ **Faster** - Quick snapshot extraction
-- 📊 **Basic Data** - Less complete than recursive extraction
-- 🔄 **BigQuery Ready** - Directly uploads to BigQuery
+**Created Objects:**
+- 📋 `okrs_external` - External table pointing to Cloud Storage CSV files
+- 🔍 `okrs_analysis_view` - Cleaned and enriched data with calculated fields
+- 📅 `okrs_latest_view` - Most recent scrape data only
+- 👥 `okrs_emea_analysis_view` - EMEA team-specific analysis
+
+**Benefits:**
+- ✅ **Zero Storage Cost** - Data stays in Cloud Storage
+- 🔄 **Always Up-to-Date** - Automatically includes new files
+- ⚡ **Fast Queries** - Direct SQL access to CSV data
+- 📊 **Rich Analysis** - Pre-built views with health metrics
+
+### Run Health Check Analysis
+
+```bash
+# Quick health check summary (replicates Python tool analysis)
+python tools/bq/run_okr_health_check_bq.py
+
+# Detailed malformed OKRs with checkmarks
+python tools/bq/run_okr_health_check_bq.py --query 4
+
+# Parent goals needing metrics (aggregation candidates)
+python tools/bq/run_okr_health_check_bq.py --query 5
+
+# Export results as CSV
+python tools/bq/run_okr_health_check_bq.py --format csv > health_report.csv
+```
+
+**Key Health Check Queries:**
+- 📊 **Overall Health Summary** - Total healthy vs malformed OKRs
+- 👥 **Health by Team** - Team-by-team breakdown with percentages  
+- 📋 **Progress Type Distribution** - Analysis by metric attachment
+- ❌ **Malformed OKRs Details** - Detailed breakdown with ✅/❌ indicators
+- 🎯 **Aggregation Candidates** - Parent goals that can use rollup metrics
+- 🚨 **People Without OKRs** - Team members missing OKRs
+
+See `sql/example_queries.sql` for all BigQuery health check queries.
+
+
 
 ## 🛠️ Analysis Tools
 
@@ -271,9 +317,17 @@ python tools/okrs_sanity_check_scrap_data.py --cloud
 ### BigQuery Analysis
 
 ```bash
-python tools/okrs_sanity_check_bq_data.py
-python tools/analyse_okr_coverage_in_bq.py
-python tools/generate_okr_tree_from_bq.py
+# Setup external tables (one-time)
+python tools/bq/setup_external_table.py
+
+# Health check analysis
+python tools/bq/run_okr_health_check_bq.py
+
+# Corporate objectives coverage analysis
+python tools/bq/analyse_okr_coverage_in_bq.py
+
+# CRE team goals tree visualization
+python tools/bq/generate_okr_tree_from_bq.py
 ```
 
 ## 🔧 Troubleshooting
