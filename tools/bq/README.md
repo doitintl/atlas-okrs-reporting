@@ -49,6 +49,38 @@ python tools/bq/run_okr_health_check_bq.py --format csv
 8. Comparative health analysis across time
 9. Summary statistics
 
+### `analyse_okr_coverage_in_bq.py`
+Analyzes corporate objectives coverage by CRE teams using real goal hierarchy from external tables.
+
+**Usage:**
+```bash
+# Run full coverage analysis
+python tools/bq/analyse_okr_coverage_in_bq.py
+```
+
+**Features:**
+- Maps corporate objectives to actual goals in BigQuery
+- Analyzes CRE team coverage using real goal hierarchies
+- Identifies unimpacted goals requiring attention
+- Provides actionable recommendations for leadership
+- EMEA-specific coverage analysis excluding US-based personnel
+
+### `generate_okr_tree_from_bq.py`
+Generates hierarchical tree visualization of CRE team goals from external tables.
+
+**Usage:**
+```bash
+# Generate goals tree for CRE teams
+python tools/bq/generate_okr_tree_from_bq.py
+```
+
+**Features:**
+- Shows goal hierarchy with owners in parentheses
+- Filters only CRE-related goals recursively
+- Displays tree structure with visual connectors (├── └──)
+- Provides statistics on total goals in tree
+- Real-time data from latest CSV files
+
 ## Benefits
 
 - **Zero storage cost** - Data stays in Cloud Storage

@@ -1,14 +1,17 @@
 """
 Script to generate goals tree for CRE teams with owners in parentheses.
 
+⚠️  MIGRATED TO EXTERNAL TABLES: This script now uses BigQuery external table views
+   instead of loaded CSV data for better performance and real-time analysis.
+
 Dependencies are managed in pyproject.toml. Install with: uv sync
 """
 import sys
 import os
 from pathlib import Path
 
-# Add helpers directory to path for config loader
-helpers_dir = Path(__file__).parent.parent / "helpers"
+# Add helpers directory to path for config loader (go up 3 levels: bq -> tools -> project root -> helpers)
+helpers_dir = Path(__file__).parent.parent.parent / "helpers"
 sys.path.insert(0, str(helpers_dir))
 
 from config_loader import get_bigquery_config, get_cre_teams
@@ -33,16 +36,10 @@ def get_cre_team_members(client):
     return set(teams_df['person'].str.strip())
 
 def get_okrs_data(client):
-    """Get all OKRs from the most recent snapshot"""
-    okrs_query = f'SELECT * FROM `{config["dataset"]}.{config["table"]}`'
+    """Get all OKRs from the most recent snapshot using external table views"""
+    # Use latest view instead of raw table - automatically gets most recent data
+    okrs_query = f'SELECT * FROM `{config["dataset"]}.okrs_latest_view`'
     okrs_df = client.query(okrs_query).to_dataframe()
-    
-    if 'created_at' in okrs_df.columns and not okrs_df.empty:
-        okrs_df['created_at'] = pd.to_datetime(okrs_df['created_at'], errors='coerce', format='%Y%m%d%H%M')
-        latest_ts = okrs_df['created_at'].max()
-        okrs_df = okrs_df[okrs_df['created_at'] == latest_ts]
-        okrs_df = okrs_df.drop(columns=['created_at'])
-    
     return okrs_df
 
 def build_goal_hierarchy(okrs_df: pd.DataFrame, cre_members: Set[str]) -> Dict:
@@ -163,7 +160,7 @@ def print_tree(trees: List[Dict], indent: str = ""):
                     print_tree([child], next_indent)
 
 def main():
-    print("Generating goals tree for CRE teams...\n")
+    print("Generating goals tree for CRE teams (using external tables)...\n")
     
     client = bigquery.Client(project=config["project"]) if config["project"] else bigquery.Client()
     
@@ -173,7 +170,7 @@ def main():
     
     # Get OKRs data
     okrs_df = get_okrs_data(client)
-    print(f"Total OKRs in snapshot: {len(okrs_df)}")
+    print(f"Total OKRs in latest snapshot: {len(okrs_df)}")
     
     # Build hierarchy
     trees = build_goal_hierarchy(okrs_df, cre_members)
