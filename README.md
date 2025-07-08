@@ -148,29 +148,31 @@ gcloud builds submit \
     --substitutions=ATLASSIAN_BASE_URL=https://mycompany.atlassian.net,ORGANIZATION_ID=myorg123
 ```
 
-### Cloud Run Usage
+### Cloud Run Jobs Usage
 
 ```bash
-# Health check
-curl https://your-service-url/
+# Execute scraping job manually
+gcloud run jobs execute okrs-scraper-job --region=europe-west1
 
-# Execute scraping
-curl -X POST https://your-service-url/scrape
+# Check job execution status
+gcloud run jobs executions list --job=okrs-scraper-job --region=europe-west1
+
+# View logs from latest execution
+gcloud run jobs executions logs [EXECUTION-NAME] --region=europe-west1
+
+# View job configuration
+gcloud run jobs describe okrs-scraper-job --region=europe-west1
 ```
 
-**Successful Response:**
-```json
-{
-  "status": "success",
-  "message": "Scraping completed successfully",
-  "data": {
-    "public_url": "https://storage.googleapis.com/your-bucket/okrs/export-202507052015_processed.csv",
-    "filename": "okrs/export-202507052015_processed.csv",
-    "total_okrs": 150,
-    "timestamp": "2025-07-05T20:15:00"
-  }
-}
-```
+**Automated Execution:**
+The job runs automatically via Cloud Scheduler:
+- 🌅 **8:00 AM** daily (Europe/Madrid timezone)
+- 🌆 **5:00 PM** daily (Europe/Madrid timezone)
+
+**Successful Execution Results:**
+- ✅ New CSV file uploaded to Cloud Storage: `gs://project-okrs-data/okrs/export-YYYYMMDDHHMM_processed.csv`
+- 📊 BigQuery external tables automatically include new data
+- 📈 Health check tools can analyze latest data immediately
 
 ## 📊 Original Bash Scripts
 

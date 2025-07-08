@@ -44,9 +44,9 @@ source ../config.env
 REGION="${REGION:-europe-west1}"
 JOB_NAME="${JOB_NAME:-okrs-scraper-job}"
 SCHEDULER_NAME="okrs-scraper-scheduler"
-SCHEDULE="${SCHEDULE:-0 8 * * MON}"  # Every Monday at 8 AM
+SCHEDULE="${SCHEDULE:-0 8,17 * * *}"  # Every day at 8 AM and 5 PM
 TIMEZONE="${TIMEZONE:-Europe/Madrid}"
-DESCRIPTION="Automated OKRs scraping job - executes weekly"
+DESCRIPTION="Automated OKRs scraping job - executes twice daily (8AM and 5PM)"
 
 echo -e "${BLUE}📋 Configuration:${NC}"
 echo "  Project: $PROJECT_ID"
