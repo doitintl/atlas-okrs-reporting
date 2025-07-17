@@ -180,73 +180,55 @@ process_goal_recursive() {
 # Function to process JSON and extract specific fields
 process_goal_json() {
     local json_file="$1"
-    
+
     # Verify that the file exists and has content
     if [ ! -f "$json_file" ] || [ ! -s "$json_file" ]; then
-        echo "null,null,null,null,null,null,null,null,null,null,null"
+        echo "null,null,null,null,null,null,null,null,null,null,null,null"
         return
     fi
-    
-    # Check if the goal is archived and skip it if so
+
     if command -v jq &> /dev/null; then
-        local archived=$(jq -r '.data.goal.archived // false' "$json_file" 2>/dev/null)
-        if [ "$archived" = "true" ]; then
-            # Archived goal, do not include in CSV
-            return
-        fi
-    fi
-    
-    # Use jq to extract specific fields
-    if command -v jq &> /dev/null; then
-        # Extract fields using jq with specified paths
+        # Extract fields using jq with specified paths (all from .data.goal)
         local owner_name=$(jq -r '.data.goal.owner.pii.name // "null"' "$json_file" 2>/dev/null || echo "null")
         local goal_key=$(jq -r '.data.goal.key // "null"' "$json_file" 2>/dev/null || echo "null")
         local target_date=$(jq -r '.data.goal.targetDate // "null"' "$json_file" 2>/dev/null || echo "null")
         local goal_name=$(jq -r '.data.goal.name // "null"' "$json_file" 2>/dev/null || echo "null")
         local parent_goal_key=$(jq -r '.data.goal.parentGoal.key // "null"' "$json_file" 2>/dev/null || echo "null")
-        
         # Extract subgoals keys (separated by ;)
         local subgoals=$(jq -r '[.data.goal.subGoals.edges[]?.node.key // empty] | join(";")' "$json_file" 2>/dev/null || echo "")
         if [ -z "$subgoals" ]; then
             subgoals="null"
         fi
-        
         # Extract tags (separated by ;)
         local tags=$(jq -r '[.data.goal.tags.edges[]?.node.name // empty] | join(";")' "$json_file" 2>/dev/null || echo "")
         if [ -z "$tags" ]; then
             tags="null"
         fi
-        
         # Extract progress type
         local progress_type=$(jq -r '.data.goal.progress.type // "null"' "$json_file" 2>/dev/null || echo "null")
-        
         # Extract teams (separated by ;)
         local teams=$(jq -r '[.data.goal.teamsV2.edges[]?.node.name // empty] | join(";")' "$json_file" 2>/dev/null || echo "")
         if [ -z "$teams" ]; then
             teams="null"
         fi
-        
         # Extract start date
         local start_date=$(jq -r '.data.goal.startDate // "null"' "$json_file" 2>/dev/null || echo "null")
-        
         # Extract creation date
         local creation_date=$(jq -r '.data.goal.creationDate // "null"' "$json_file" 2>/dev/null || echo "null")
-        
         # Extract Lineage (specific custom field)
-        # Since we don't have definition.name in the query, we take the first available customField value
         local lineage=$(jq -r '.data.goal.customFields.edges[]?.node.values.edges[]?.node.value // empty' "$json_file" 2>/dev/null | head -1)
         if [ -z "$lineage" ]; then
             lineage="null"
         fi
-        
+        # Extract ARI/entityId
+        local ari=$(jq -r '.data.goal.id // "null"' "$json_file" 2>/dev/null || echo "null")
         # Clean fields (escape commas and quotes for CSV)
-        owner_name=$(echo "$owner_name" | sed 's/,/;/g' | sed 's/"/""/g')
-        goal_name=$(echo "$goal_name" | sed 's/,/;/g' | sed 's/"/""/g')
-        
+        owner_name=$(echo "$owner_name" | sed 's/,/;/g' | sed 's/\"/\"\"/g')
+        goal_name=$(echo "$goal_name" | sed 's/,/;/g' | sed 's/\"/\"\"/g')
         # Generate CSV line
-        echo "\"$owner_name\",\"$goal_key\",\"$target_date\",\"$goal_name\",\"$parent_goal_key\",\"$subgoals\",\"$tags\",\"$progress_type\",\"$teams\",\"$start_date\",\"$creation_date\",\"$lineage\""
+        echo "\"$owner_name\",\"$goal_key\",\"$target_date\",\"$goal_name\",\"$parent_goal_key\",\"$subgoals\",\"$tags\",\"$progress_type\",\"$teams\",\"$start_date\",\"$creation_date\",\"$lineage\",\"$ari\""
     else
-        echo "null,null,null,null,null,null,null,null,null,null,null"
+        echo "null,null,null,null,null,null,null,null,null,null,null,null"
     fi
 }
 
@@ -351,7 +333,7 @@ echo ""
 echo "📊 STEP 4: Generating final CSV with all goals from the tree..."
 
 # Create CSV header
-echo "created_at,Owner,Goal Key,Target Date,Name,Parent Goal,Sub-goals,Tags,Progress Type,Teams,Start Date,Creation Date,Lineage" > "$FINAL_CSV"
+echo "created_at,Owner,Goal Key,Target Date,Name,Parent Goal,Sub-goals,Tags,Progress Type,Teams,Start Date,Creation Date,Lineage,EntityId" > "$FINAL_CSV"
 
 # Process all generated JSON files
 total_processed=0

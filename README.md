@@ -332,6 +332,35 @@ python tools/bq/analyse_okr_coverage_in_bq.py
 python tools/bq/generate_okr_tree_from_bq.py
 ```
 
+## Automated Posting of Comments to Atlassian OKRs for Malformed OKRs
+
+This project includes a tool to automatically post comments to Atlassian OKRs that are missing required fields (malformed OKRs). The workflow is as follows:
+
+1. **Scraping OKRs**: Use the scraping script to generate a CSV of all OKRs, including a column `EntityId` (the Atlassian ARI) and all required fields.
+2. **Sanity Check**: The sanity check logic identifies malformed OKRs (missing required fields such as Progress Metric, Teams, etc.).
+3. **Posting Comments**: Run `tools/post_okr_comments.py` to post comments to Atlassian for each malformed OKR. For each OKR:
+    - The script shows a preview of the comment message and the OKR URL.
+    - You are prompted for confirmation before posting.
+    - The comment is posted using the `EntityId` and your configured session cookies.
+
+### Configuration
+- All endpoint URLs and authentication cookies are composed from the parameters in `config.env` (no hardcoded secrets).
+- The script uses the same session cookies and base URL as the scraping workflow.
+
+### Requirements
+- Python 3.8+
+- All dependencies are managed in `pyproject.toml` (install with `uv sync`).
+- You must have a valid session cookie in `ATLASSIAN_COOKIES` in your `config.env`.
+
+### Example Workflow
+1. Run the scraping script to generate the CSV with OKRs and `EntityId`.
+2. Run the sanity check to identify malformed OKRs.
+3. Run `python tools/post_okr_comments.py --file <your_csv>` to post comments to all malformed OKRs in Atlassian, with preview and confirmation for each.
+
+See the script and comments for further details.
+
+---
+
 ## 🔧 Troubleshooting
 
 ### ❌ Error 401 "Unauthorized"

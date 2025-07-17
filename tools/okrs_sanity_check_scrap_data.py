@@ -232,6 +232,49 @@ def find_aggregation_candidates(okrs_df, team_okrs):
     
     return candidates
 
+def get_malformed_okrs_and_teams(file: str = None, cloud: bool = False):
+    """
+    Returns the DataFrame of malformed OKRs for team members and the teams DataFrame.
+    Args:
+        file (str): Path to the CSV file to analyze (optional)
+        cloud (bool): Whether to download the latest file from Cloud Storage
+    Returns:
+        malformed_team_okrs (pd.DataFrame): DataFrame of malformed OKRs for team members
+        teams_df (pd.DataFrame): DataFrame of teams
+    """
+    # Load team members
+    teams_df, team_members = load_team_members()
+
+    # Find and load CSV
+    temp_file_to_cleanup = None
+    try:
+        if cloud:
+            csv_file, _ = download_latest_from_cloud()
+            temp_file_to_cleanup = csv_file
+        elif file:
+            csv_file = file
+            if not os.path.exists(csv_file):
+                raise FileNotFoundError(f"Specified file not found: {csv_file}")
+        else:
+            csv_file = find_latest_csv()
+        okrs_df = pd.read_csv(csv_file)
+    finally:
+        if temp_file_to_cleanup and os.path.exists(temp_file_to_cleanup):
+            os.unlink(temp_file_to_cleanup)
+
+    # Filter only team members' OKRs
+    team_okrs = okrs_df[okrs_df['Owner'].str.strip().isin(team_members)].copy()
+    if team_okrs.empty:
+        return pd.DataFrame(), teams_df
+
+    # Perform enhanced sanity check
+    team_okrs['sanity_missing'] = team_okrs.apply(enhanced_okr_sanity_check, axis=1)
+    team_okrs['is_sane'] = team_okrs['sanity_missing'].apply(lambda x: len(x) == 0)
+
+    # Get malformed OKRs
+    malformed_team_okrs = team_okrs[~team_okrs['is_sane']].copy()
+    return malformed_team_okrs, teams_df
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Enhanced OKRs Sanity Check')
