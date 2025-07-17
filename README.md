@@ -73,7 +73,8 @@ okrs-reporting/
 └── tools/
     ├── generate_okr_fix_messages.py       # Generate Slack messages for OKR fixes
     ├── okrs_sanity_check_scrap_data.py    # Sanity check scraped data
-    └── bq/                                 # ✅ BigQuery tools
+    ├── post_okr_comments.py               # Posts comments to Atlassian OKRs for malformed OKRs
+    └── bq/                                # ✅ BigQuery tools
         ├── setup_external_table.py        # Setup BigQuery external table
         ├── run_okr_health_check_bq.py     # BigQuery health check analysis
         ├── analyse_okr_coverage_in_bq.py  # Corporate objectives coverage analysis
