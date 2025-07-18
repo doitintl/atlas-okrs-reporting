@@ -2,12 +2,14 @@
 """
 Post comments to Atlassian for malformed OKRs
 
-This script loads malformed OKRs using the shared logic from okrs_sanity_check_scrap_data.py,
-generates a specific English message for each malformed OKR, shows a preview, asks for confirmation,
-and if accepted, posts a comment to the Atlassian endpoint using config.env values.
+This script loads malformed OKRs from multiple sources and posts comments to Atlassian.
+Supports three data sources:
+1. Local CSV file (--file)
+2. Cloud Storage bucket (--cloud) 
+3. BigQuery external table (--bigquery)
 
 Usage:
-    python post_okr_comments.py [--file <csv_file>] [--cloud]
+    python post_okr_comments.py [--file <csv_file>] [--cloud] [--bigquery]
 
 Dependencies are managed in pyproject.toml. Install with: uv sync
 """
@@ -20,10 +22,16 @@ import requests
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent / 'helpers'))
-from config_loader import load_config
+from config_loader import load_config, get_bigquery_config
 
 sys.path.append(str(Path(__file__).parent))
 from okrs_sanity_check_scrap_data import get_malformed_okrs_and_teams, is_empty_or_null
+
+try:
+    from google.cloud import bigquery
+    BIGQUERY_AVAILABLE = True
+except ImportError:
+    BIGQUERY_AVAILABLE = False
 
 def format_missing_fields_english(missing_fields):
     """Format missing fields as English phrases"""
@@ -57,12 +65,129 @@ def get_entity_id_from_row(okr_row, config):
     entity_id = okr_row.get('EntityId')
     if entity_id and str(entity_id).lower() != 'null' and str(entity_id).strip() != '':
         return entity_id
-    # Fallbacks
+    
+    # Fallback to 'entity_id' (lowercase) if present (BigQuery compatibility)
+    entity_id = okr_row.get('entity_id')
+    if entity_id and str(entity_id).lower() != 'null' and str(entity_id).strip() != '':
+        return entity_id
+    
+    # Legacy fallbacks
     if 'entityId' in okr_row:
         return okr_row['entityId']
     if 'Goal Key' in okr_row and 'ATLASSIAN_ENTITY_ID_PREFIX' in config:
         return config['ATLASSIAN_ENTITY_ID_PREFIX'] + str(okr_row['Goal Key'])
     return config.get('ATLASSIAN_ENTITY_ID')
+
+def get_malformed_okrs_from_bigquery():
+    """
+    Get malformed OKRs directly from BigQuery external table.
+    Uses the same logic as the Python script but queries BigQuery directly.
+    """
+    if not BIGQUERY_AVAILABLE:
+        raise ImportError("Google Cloud BigQuery library not available. Install with: pip install google-cloud-bigquery")
+    
+    bq_config = get_bigquery_config()
+    
+    # Determine project ID
+    if bq_config["project"]:
+        project_id = bq_config["project"]
+    else:
+        # Use default project from environment
+        client = bigquery.Client()
+        project_id = client.project
+    
+    client = bigquery.Client(project=project_id)
+    
+    # Query to get malformed OKRs using the same logic as the Python script
+    query = f"""
+    SELECT 
+      goal_key as goal_key,
+      goal_name as goal_name,
+      owner as owner,
+      target_date as target_date,
+      parent_goal as parent_goal,
+      sub_goals_array as sub_goals_array,
+      tags_array as tags_array,
+      progress_type as progress_type,
+      teams_array as teams_array,
+      start_date as start_date,
+      creation_date as creation_date,
+      lineage as lineage,
+      entity_id as entity_id,
+      -- Check each requirement (same logic as Python script)
+      CASE WHEN has_target_date THEN 0 ELSE 1 END +
+      CASE WHEN teams_array IS NOT NULL AND ARRAY_LENGTH(teams_array) > 0 THEN 0 ELSE 1 END +
+      CASE WHEN parent_goal IS NOT NULL THEN 0 ELSE 1 END +
+      CASE WHEN owner IS NOT NULL AND TRIM(owner) != '' THEN 0 ELSE 1 END +
+      CASE WHEN has_metric THEN 0 ELSE 1 END +
+      CASE WHEN has_lineage THEN 0 ELSE 1 END as missing_count,
+      -- Build missing fields list using CASE statements
+      CASE 
+        WHEN NOT has_target_date THEN 'Target Date'
+        WHEN NOT (teams_array IS NOT NULL AND ARRAY_LENGTH(teams_array) > 0) THEN 'Teams'
+        WHEN NOT (parent_goal IS NOT NULL) THEN 'Parent Goal'
+        WHEN NOT (owner IS NOT NULL AND TRIM(owner) != '') THEN 'Owner'
+        WHEN NOT has_metric THEN 'Progress Type (Metric)'
+        WHEN NOT has_lineage THEN 'Lineage'
+        ELSE ''
+      END as sanity_missing
+    FROM `{project_id}.{bq_config['dataset']}.okrs_emea_analysis_view`
+    WHERE 
+      -- Only malformed OKRs
+      CASE WHEN has_target_date THEN 0 ELSE 1 END +
+      CASE WHEN teams_array IS NOT NULL AND ARRAY_LENGTH(teams_array) > 0 THEN 0 ELSE 1 END +
+      CASE WHEN parent_goal IS NOT NULL THEN 0 ELSE 1 END +
+      CASE WHEN owner IS NOT NULL AND TRIM(owner) != '' THEN 0 ELSE 1 END +
+      CASE WHEN has_metric THEN 0 ELSE 1 END +
+      CASE WHEN has_lineage THEN 0 ELSE 1 END > 0
+    ORDER BY owner, goal_name
+    """
+    
+    try:
+        query_job = client.query(query)
+        results = query_job.result()
+        
+        # Convert to DataFrame-like structure
+        malformed_okrs = []
+        for row in results:
+            okr_dict = dict(row.items())
+            # Map column names to expected format
+            mapped_dict = {
+                'Goal Key': okr_dict.get('goal_key', ''),
+                'Name': okr_dict.get('goal_name', ''),
+                'Owner': okr_dict.get('owner', ''),
+                'Target Date': okr_dict.get('target_date', ''),
+                'Parent Goal': okr_dict.get('parent_goal', ''),
+                'Sub-goals': okr_dict.get('sub_goals_array', []),
+                'Tags': okr_dict.get('tags_array', []),
+                'Progress Type': okr_dict.get('progress_type', ''),
+                'Teams': okr_dict.get('teams_array', []),
+                'Start Date': okr_dict.get('start_date', ''),
+                'Creation Date': okr_dict.get('creation_date', ''),
+                'Lineage': okr_dict.get('lineage', ''),
+                'EntityId': okr_dict.get('entity_id', ''),
+                'sanity_missing': okr_dict.get('sanity_missing', [])
+            }
+            
+            # Convert arrays to strings for compatibility
+            if mapped_dict['Sub-goals']:
+                mapped_dict['Sub-goals'] = ';'.join(mapped_dict['Sub-goals'])
+            if mapped_dict['Tags']:
+                mapped_dict['Tags'] = ';'.join(mapped_dict['Tags'])
+            if mapped_dict['Teams']:
+                mapped_dict['Teams'] = ';'.join(mapped_dict['Teams'])
+            # Convert sanity_missing string to list
+            if mapped_dict['sanity_missing'] and mapped_dict['sanity_missing'] != '':
+                mapped_dict['sanity_missing'] = [mapped_dict['sanity_missing']]
+            else:
+                mapped_dict['sanity_missing'] = []
+            
+            malformed_okrs.append(mapped_dict)
+        
+        return malformed_okrs, []  # Return empty teams list for compatibility
+        
+    except Exception as e:
+        raise Exception(f"Error querying BigQuery: {e}")
 
 def post_comment_to_atlassian(entity_id, comment_text, config):
     """
@@ -110,12 +235,35 @@ def post_comment_to_atlassian(entity_id, comment_text, config):
 
 def main():
     parser = argparse.ArgumentParser(description='Post comments to Atlassian for malformed OKRs')
-    parser.add_argument('--file', '-f', type=str, help='Specify the CSV file to analyze (optional)')
+    parser.add_argument('--file', '-f', type=str, help='Specify the CSV file to analyze (local file)')
     parser.add_argument('--cloud', '-c', action='store_true', help='Download and analyze the latest file from Cloud Storage bucket')
+    parser.add_argument('--bigquery', '-b', action='store_true', help='Get malformed OKRs directly from BigQuery external table')
     args = parser.parse_args()
 
+    # Validate arguments
+    source_count = sum([bool(args.file), args.cloud, args.bigquery])
+    if source_count == 0:
+        print("❌ Please specify a data source: --file, --cloud, or --bigquery")
+        return
+    elif source_count > 1:
+        print("❌ Please specify only one data source: --file, --cloud, or --bigquery")
+        return
+
     print("\n🔍 Loading malformed OKRs...")
-    malformed_okrs, teams_df = get_malformed_okrs_and_teams(file=args.file, cloud=args.cloud)
+    
+    try:
+        if args.bigquery:
+            print("📊 Loading from BigQuery...")
+            malformed_okrs, teams_df = get_malformed_okrs_from_bigquery()
+            # Convert to DataFrame-like structure for compatibility
+            import pandas as pd
+            malformed_okrs = pd.DataFrame(malformed_okrs)
+        else:
+            print("📁 Loading from CSV...")
+            malformed_okrs, teams_df = get_malformed_okrs_and_teams(file=args.file, cloud=args.cloud)
+    except Exception as e:
+        print(f"❌ Error loading data: {e}")
+        return
 
     if malformed_okrs.empty:
         print("🎉 No malformed OKRs found. Exiting.")
