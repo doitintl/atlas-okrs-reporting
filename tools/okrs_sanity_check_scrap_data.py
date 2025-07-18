@@ -257,7 +257,19 @@ def get_malformed_okrs_and_teams(file: str = None, cloud: bool = False):
                 raise FileNotFoundError(f"Specified file not found: {csv_file}")
         else:
             csv_file = find_latest_csv()
-        okrs_df = pd.read_csv(csv_file)
+        
+        if not csv_file:
+            raise FileNotFoundError("No CSV file found")
+
+        print(f"📊 Loading data from: {csv_file}")
+        df = pd.read_csv(csv_file)
+
+        # Ensure EntityId column is present (for backward compatibility)
+        if 'EntityId' not in df.columns:
+            print("⚠️ Warning: EntityId column not found in CSV. This may affect comment posting functionality.")
+            df['EntityId'] = None
+
+        okrs_df = df.copy() # Renamed df to okrs_df to avoid conflict with the function's return value
     finally:
         if temp_file_to_cleanup and os.path.exists(temp_file_to_cleanup):
             os.unlink(temp_file_to_cleanup)
