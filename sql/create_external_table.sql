@@ -23,7 +23,8 @@ CREATE OR REPLACE EXTERNAL TABLE `{project_id}.okrs_dataset.okrs_external`
   teams STRING OPTIONS(description="Semi-colon separated list of associated teams"),
   start_date STRING OPTIONS(description="Goal start date"),
   creation_date STRING OPTIONS(description="Goal creation date"),
-  lineage STRING OPTIONS(description="Goal lineage in dot notation (e.g. doit.cs.cre.emea.south.es-pod-1)")
+  lineage STRING OPTIONS(description="Goal lineage in dot notation (e.g. doit.cs.cre.emea.south.es-pod-1)"),
+  entity_id STRING OPTIONS(description="Atlassian ARI (Entity ID) for posting comments and API operations")
 )
 OPTIONS (
   format = 'CSV',
@@ -75,6 +76,10 @@ SELECT
     WHEN TRIM(lineage) = 'null' OR TRIM(lineage) = '' THEN NULL
     ELSE TRIM(lineage)
   END as lineage,
+  CASE 
+    WHEN TRIM(entity_id) = 'null' OR TRIM(entity_id) = '' THEN NULL
+    ELSE TRIM(entity_id)
+  END as entity_id,
   
   -- Calculated fields for analysis
   CASE 
@@ -91,6 +96,11 @@ SELECT
     WHEN TRIM(lineage) = 'null' OR TRIM(lineage) = '' THEN false
     ELSE true
   END as has_lineage,
+  
+  CASE 
+    WHEN TRIM(entity_id) = 'null' OR TRIM(entity_id) = '' THEN false
+    ELSE true
+  END as has_entity_id,
   
   -- OKR health analysis
   CASE 
