@@ -65,6 +65,7 @@ class OKRData:
     start_date: str
     creation_date: str
     lineage: str
+    entity_id: str
     archived: bool = False
 
 class CloudRunOKRScraper:
@@ -262,6 +263,9 @@ class CloudRunOKRScraper:
                         lineage = first_value
                         break
             
+            # Extract EntityId from goal_data
+            entity_id = goal_data.get('id', '')
+            
             # Create OKRData object
             okr_data = OKRData(
                 owner_name=owner_name,
@@ -276,6 +280,7 @@ class CloudRunOKRScraper:
                 start_date=start_date,
                 creation_date=created_at,
                 lineage=lineage,
+                entity_id=entity_id,
                 archived=archived
             )
             
@@ -399,7 +404,7 @@ class CloudRunOKRScraper:
         csv_lines = []
         
         # Add CSV header exactly as bash script
-        csv_lines.append('created_at,Owner,Goal Key,Target Date,Name,Parent Goal,Sub-goals,Tags,Progress Type,Teams,Start Date,Creation Date,Lineage')
+        csv_lines.append('created_at,Owner,Goal Key,Target Date,Name,Parent Goal,Sub-goals,Tags,Progress Type,Teams,Start Date,Creation Date,Lineage,EntityId')
         
         # Helper function to clean fields - using semicolon separator like bash script
         def clean_field(field):
@@ -422,7 +427,7 @@ class CloudRunOKRScraper:
                 continue
                 
             # Generate CSV line exactly like bash script
-            csv_line = f'{timestamp},"{clean_string_field(okr_data.owner_name)}","{clean_field(okr_data.goal_key)}","{clean_field(okr_data.target_date)}","{clean_string_field(okr_data.goal_name)}","{clean_field(okr_data.parent_goal_key)}","{clean_field(okr_data.subgoals)}","{clean_field(okr_data.tags)}","{clean_field(okr_data.progress_type)}","{clean_field(okr_data.teams)}","{clean_field(okr_data.start_date)}","{clean_field(okr_data.creation_date)}","{clean_field(okr_data.lineage)}"'
+            csv_line = f'{timestamp},"{clean_string_field(okr_data.owner_name)}","{clean_field(okr_data.goal_key)}","{clean_field(okr_data.target_date)}","{clean_string_field(okr_data.goal_name)}","{clean_field(okr_data.parent_goal_key)}","{clean_field(okr_data.subgoals)}","{clean_field(okr_data.tags)}","{clean_field(okr_data.progress_type)}","{clean_field(okr_data.teams)}","{clean_field(okr_data.start_date)}","{clean_field(okr_data.creation_date)}","{clean_field(okr_data.lineage)}","{clean_field(okr_data.entity_id)}"'
             csv_lines.append(csv_line)
         
         csv_content = '\n'.join(csv_lines)
